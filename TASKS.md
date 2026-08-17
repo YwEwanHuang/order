@@ -41,7 +41,11 @@
   - ARIA：role/aria-pressed/aria-selected/aria-label 覆盖菜品卡、餐次、分类
   - 触控高度 ≥44rpx（U-003）：餐次 88rpx、主按钮 88rpx
   - 49 单元测试通过、tsc 编译通过
-- [ ] T-024 实现管理员菜品列表和编辑表单（含图片上传）
+- [x] T-024 实现管理员菜品列表和编辑表单（含图片上传）
+  - 列表：客户端搜索 + 分类 chips、下拉刷新、启停确认弹窗、错误 requestId
+  - 编辑：imageUrl 预览、sortOrder、描述字符计数 + 硬截断、上传遮罩、离开未保存提示
+  - domain/adminDishFilters 纯函数 + 10 项单元测试
+  - 59 单元测试通过、tsc 编译通过
 
 **出口标准：** 普通用户 403 管理 API；停用菜品从新菜单消失；历史快照不变。
 
