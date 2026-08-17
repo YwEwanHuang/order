@@ -12,25 +12,58 @@
   padding: 24rpx;
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: 28rpx;
 }
 
 .form-item {
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
+  gap: 12rpx;
 }
 
 .form-label {
   font-size: 28rpx;
   color: #666666;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.form-label-inline {
+  font-size: 28rpx;
+  color: #666666;
+}
+
+.form-switch-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  background: #F9F9F9;
+  padding: 16rpx 20rpx;
+  border-radius: 8rpx;
+  /* U-003 触控高度 */
+  min-height: 88rpx;
 }
 
 .required {
   color: #E64340;
 }
 
+.char-count {
+  font-size: 22rpx;
+  color: #999999;
+  font-weight: 400;
+}
+
+/* 图片选择区 */
+.image-picker-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
 .image-picker {
+  position: relative;
   width: 200rpx;
   height: 200rpx;
   border-radius: 12rpx;
@@ -62,12 +95,42 @@
   color: #AAAAAA;
 }
 
+.uploading-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-size: 26rpx;
+}
+
+.image-remove {
+  color: #E64340;
+  font-size: 26rpx;
+  /* U-003 触控高度 */
+  padding: 16rpx 20rpx;
+  min-height: 60rpx;
+  line-height: 28rpx;
+}
+
 .form-input {
   background: #F9F9F9;
   border-radius: 8rpx;
   padding: 16rpx;
   font-size: 30rpx;
   color: #333333;
+  /* U-003 触控高度 */
+  min-height: 56rpx;
+}
+
+.form-hint {
+  font-size: 22rpx;
+  color: #999999;
 }
 
 .form-textarea {
@@ -87,16 +150,48 @@
   padding: 16rpx;
   font-size: 30rpx;
   color: #333333;
+  /* U-003 触控高度 */
+  min-height: 56rpx;
 }
 
+/* 错误提示 */
 .error-tip {
-  padding: 12rpx 16rpx;
+  padding: 16rpx;
   background: #FFF0F0;
   border-radius: 6rpx;
   font-size: 26rpx;
   color: #E64340;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
 }
 
+.error-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 22rpx;
+  color: #BBBBBB;
+  background: #FFFFFF;
+  padding: 8rpx 12rpx;
+  border-radius: 6rpx;
+}
+
+.error-meta-label {
+  color: #999999;
+}
+
+.error-meta-value {
+  color: #666666;
+  font-family: monospace;
+  margin: 0 4rpx;
+}
+
+.error-meta-hint {
+  color: #86C8A0;
+}
+
+/* 保存按钮 */
 .save-btn {
   background: #86C8A0;
   color: #FFFFFF;
@@ -104,4 +199,8 @@
   height: 88rpx;
   line-height: 88rpx;
   font-size: 30rpx;
+}
+
+.save-btn[disabled] {
+  background: #CCCCCC;
 }

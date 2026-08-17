@@ -65,6 +65,8 @@ declare const wx: {
     success?: () => void;
     fail?: (err: unknown) => void;
   }): void;
+  enableAlertBeforeUnload(options: { message: string }): void;
+  disableAlertBeforeUnload(): void;
   [key: string]: unknown;
 };
 

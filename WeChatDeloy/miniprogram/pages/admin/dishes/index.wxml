@@ -1,40 +1,131 @@
 <!-- pages/admin/dishes/index.wxml -->
 <view class="page">
+  <!-- 顶部工具栏：搜索 + 新增 -->
   <view class="toolbar">
-    <button size="mini" type="primary" bindtap="onAddTap">新增菜品</button>
-  </view>
-
-  <view wx:if="{{loading}}" class="state-view">
-    <text>加载中...</text>
-  </view>
-
-  <view wx:elif="{{error}}" class="state-view">
-    <text class="error-text">{{error}}</text>
-  </view>
-
-  <view wx:elif="{{dishes.length === 0}}" class="state-view">
-    <text>暂无菜品</text>
-    <text class="sub">点击右上角新增第一道菜品</text>
-  </view>
-
-  <view wx:else class="dish-list">
-    <view wx:for="{{dishes}}" wx:key="id" class="dish-card">
-      <view class="dish-info">
-        <text class="dish-name">{{item.name}}</text>
-        <text class="dish-category">[{{getCategoryLabel(item.category)}}]</text>
-        <text wx:if="{{!item.isActive}}" class="inactive-tag">已停用</text>
+    <view class="search-bar">
+      <input
+        class="search-input"
+        placeholder="搜索菜品名称"
+        value="{{searchKeyword}}"
+        bindinput="onSearchInput"
+        confirm-type="search"
+        aria-label="搜索菜品名称"
+      />
+      <view wx:if="{{searchKeyword}}" class="search-clear" bindtap="onClearSearch" role="button" aria-label="清除搜索">
+        ×
       </view>
-      <view class="dish-actions">
-        <button size="mini" bindtap="onEditTap" data-dish="{{item}}">编辑</button>
-        <button
-          size="mini"
-          type="{{item.isActive ? 'warn' : 'primary'}}"
-          plain
-          bindtap="onToggleActive"
-          data-dish="{{item}}"
-        >
-          {{item.isActive ? '停用' : '启用'}}
-        </button>
+    </view>
+    <button size="mini" type="primary" bindtap="onAddTap" class="add-btn">新增菜品</button>
+  </view>
+
+  <!-- 分类筛选 chips -->
+  <scroll-view scroll-x class="category-bar" enable-flex>
+    <view
+      wx:for="{{['', 'hot', 'cold', 'soup', 'staple', 'dessert']}}"
+      wx:key="*this"
+      class="category-chip {{filterCategory === item ? 'active' : ''}}"
+      data-category="{{item}}"
+      bindtap="onFilterCategory"
+      role="tab"
+      aria-selected="{{filterCategory === item}}"
+      aria-label="{{item === '' ? '全部' : (item === 'hot' ? '热菜' : item === 'cold' ? '凉菜' : item === 'soup' ? '汤类' : item === 'staple' ? '主食' : '甜点')}}"
+    >
+      {{item === '' ? '全部' : (item === 'hot' ? '热菜' : item === 'cold' ? '凉菜' : item === 'soup' ? '汤类' : item === 'staple' ? '主食' : '甜点')}}
+    </view>
+  </scroll-view>
+
+  <!-- 内容区 -->
+  <view class="content">
+    <!-- 加载状态（顶部条形，不阻塞筛选） -->
+    <view wx:if="{{loading}}" class="loading-bar" role="status" aria-live="polite">
+      <view class="loading-dot"></view>
+      <view class="loading-dot"></view>
+      <view class="loading-dot"></view>
+      <text class="loading-text">加载中</text>
+    </view>
+
+    <!-- 错误状态 -->
+    <view wx:elif="{{error}}" class="state-view" role="alert">
+      <text class="error-icon">⚠</text>
+      <text class="error-text">{{error}}</text>
+      <view wx:if="{{errorRequestId}}" class="error-meta" bindtap="onCopyRequestId">
+        <text class="error-meta-label">请求 ID：</text>
+        <text class="error-meta-value">{{errorRequestId}}</text>
+        <text class="error-meta-hint">（点击复制）</text>
+      </view>
+      <button class="retry-btn" bindtap="loadDishes" size="mini">重新加载</button>
+    </view>
+
+    <!-- 空状态：搜索/筛选无结果 -->
+    <view wx:elif="{{initialLoaded && filteredDishes.length === 0 && dishes.length > 0}}" class="state-view">
+      <text class="empty-icon">🔍</text>
+      <text class="empty-title">没有匹配的菜品</text>
+      <text class="empty-desc">尝试更换关键字或筛选条件</text>
+    </view>
+
+    <!-- 空状态：列表为空 -->
+    <view wx:elif="{{initialLoaded && dishes.length === 0}}" class="state-view">
+      <text class="empty-icon">🍽</text>
+      <text class="empty-title">还没有菜品</text>
+      <text class="empty-desc">点击右上角新增第一道菜品</text>
+    </view>
+
+    <!-- 菜品列表（支持下拉刷新） -->
+    <scroll-view
+      wx:else
+      scroll-y
+      class="dish-list"
+      refresher-enabled="{{true}}"
+      refresher-triggered="{{loading}}"
+      bindrefresherrefresh="onPullDownRefresh"
+    >
+      <view
+        wx:for="{{filteredDishes}}"
+        wx:key="id"
+        class="dish-card {{!item.isActive ? 'inactive' : ''}}"
+        data-dish="{{item}}"
+        bindtap="onEditTap"
+        role="button"
+        aria-label="编辑菜品 {{item.name}}"
+      >
+        <view class="dish-image">
+          <image src="{{item.imageUrl || '/images/default-goods-image.png'}}" mode="aspectFill" />
+        </view>
+        <view class="dish-info">
+          <view class="dish-name-row">
+            <text class="dish-name">{{item.name}}</text>
+            <text wx:if="{{!item.isActive}}" class="inactive-tag">已停用</text>
+          </view>
+          <text class="dish-meta">[{{getCategoryLabel(item.category)}}] 排序 {{item.sortOrder}}</text>
+          <text wx:if="{{item.description}}" class="dish-desc">{{item.description}}</text>
+        </view>
+        <view class="dish-actions">
+          <button
+            size="mini"
+            type="{{item.isActive ? 'warn' : 'primary'}}"
+            plain
+            catchtap="onToggleActiveRequest"
+            data-dish="{{item}}"
+            class="toggle-btn"
+            aria-label="{{item.isActive ? '停用' : '启用'}} {{item.name}}"
+          >
+            {{item.isActive ? '停用' : '启用'}}
+          </button>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <!-- 启停确认弹窗 -->
+  <view wx:if="{{pendingToggle}}" class="modal-mask" bindtap="onCancelToggle">
+    <view class="modal-content" catchtap="">
+      <text class="modal-title">{{pendingToggle.nextActive ? '启用菜品' : '停用菜品'}}</text>
+      <text class="modal-body">
+        {{pendingToggle.nextActive ? '启用后' : '停用后'}}，「{{pendingToggle.dish.name}}」将{{pendingToggle.nextActive ? '在用户菜单中显示' : '从用户菜单中隐藏'}}。
+      </text>
+      <view class="modal-actions">
+        <button bindtap="onCancelToggle">取消</button>
+        <button type="primary" bindtap="onConfirmToggle">确定</button>
       </view>
     </view>
   </view>
