@@ -7,9 +7,9 @@ RUN npm ci --only=production
 
 COPY server/src/ ./src/
 
-ENV PORT=8080
+ENV PORT=80
 ENV NODE_ENV=production
 
-EXPOSE 8080
+EXPOSE 80
 
 CMD ["node", "src/index.js"]
