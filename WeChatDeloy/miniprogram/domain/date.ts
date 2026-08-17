@@ -4,6 +4,12 @@
 
 const MAX_FUTURE_DAYS = 30;
 
+/** 暴露给选择器/UI 的常量，避免在多处硬编码 30 */
+export const DATE_RANGE = {
+  MIN_OFFSET_DAYS: 0, // 今天
+  MAX_OFFSET_DAYS: MAX_FUTURE_DAYS,
+} as const;
+
 /**
  * 获取上海时区（UTC+8）的当前 Date 对象
  */
@@ -110,4 +116,31 @@ export function daysBetween(dateStr1: string, dateStr2: string): number {
   const d2 = parseDate(dateStr2);
   const diffMs = d2.getTime() - d1.getTime();
   return Math.round(diffMs / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * 获取可点菜的日期范围（用于日期 picker 的 start/end 属性）
+ * 返回字符串格式 YYYY-MM-DD，方便直接绑定到 picker
+ */
+export function getPickerDateBounds(): { start: string; end: string } {
+  const today = new Date();
+  const max = new Date(today);
+  max.setDate(max.getDate() + MAX_FUTURE_DAYS);
+  return { start: formatDate(today), end: formatDate(max) };
+}
+
+/**
+ * 计算当前允许的最早日期字符串（仅供 picker 边界使用）
+ */
+export function getMinSelectableDate(): string {
+  return formatDate(new Date());
+}
+
+/**
+ * 计算当前允许的最晚日期字符串
+ */
+export function getMaxSelectableDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + MAX_FUTURE_DAYS);
+  return formatDate(d);
 }

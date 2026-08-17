@@ -1,4 +1,7 @@
 {
   "usingComponents": {},
-  "navigationBarTitleText": "蔓蔓点菜"
+  "navigationBarTitleText": "蔓蔓点菜",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "light",
+  "backgroundColor": "#F6F6F6"
 }

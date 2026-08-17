@@ -11,6 +11,10 @@ import {
   inferMealTypeFromTime,
   daysBetween,
   getToday,
+  getPickerDateBounds,
+  getMinSelectableDate,
+  getMaxSelectableDate,
+  DATE_RANGE,
 } from './date';
 
 describe('formatDate', () => {
@@ -164,5 +168,36 @@ describe('daysBetween', () => {
 
   it('crosses year boundary correctly', () => {
     expect(daysBetween('2026-12-30', '2027-01-02')).toBe(3);
+  });
+});
+
+describe('DATE_RANGE constants', () => {
+  it('exposes the 30-day future window', () => {
+    expect(DATE_RANGE.MAX_OFFSET_DAYS).toBe(30);
+    expect(DATE_RANGE.MIN_OFFSET_DAYS).toBe(0);
+  });
+});
+
+describe('getPickerDateBounds', () => {
+  it('returns start = today, end = today + 30', () => {
+    const { start, end } = getPickerDateBounds();
+    expect(start).toBe(getToday());
+    expect(daysBetween(start, end)).toBe(30);
+  });
+
+  it('bounds are valid YYYY-MM-DD strings', () => {
+    const { start, end } = getPickerDateBounds();
+    expect(start).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(end).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe('getMinSelectableDate / getMaxSelectableDate', () => {
+  it('min equals today', () => {
+    expect(getMinSelectableDate()).toBe(getToday());
+  });
+
+  it('max equals today + 30', () => {
+    expect(daysBetween(getMinSelectableDate(), getMaxSelectableDate())).toBe(30);
   });
 });

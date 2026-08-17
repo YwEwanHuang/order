@@ -59,6 +59,12 @@ declare const wx: {
   navigateBack(options?: object): void;
   getStorageSync(key: string): unknown;
   setStorageSync(key: string, value: unknown): void;
+  stopPullDownRefresh(): void;
+  setClipboardData(options: {
+    data: string;
+    success?: () => void;
+    fail?: (err: unknown) => void;
+  }): void;
   [key: string]: unknown;
 };
 

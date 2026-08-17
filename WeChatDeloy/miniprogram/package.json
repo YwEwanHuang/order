@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "蔓蔓点菜 - 微信小程序",
   "private": true,
+  "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc",
