@@ -37,14 +37,24 @@ function getDb() {
 
 /** 查询启用的菜品列表（可按分类） */
 async function getActiveDishes({ category } = {}) {
-  const collection = getDb().collection('dishes');
-  let query = collection.where({ isActive: true });
-  if (category) query = query.where({ category });
-  const { data } = await query
-    .orderBy('sortOrder', 'asc')
-    .orderBy('name', 'asc')
-    .get();
-  return data.map(normalizeDish);
+  try {
+    const db = getDb();
+    console.log('[cloudbase] getDb OK, calling collection...');
+    const collection = db.collection('dishes');
+    console.log('[cloudbase] collection OK, calling where...');
+    let query = collection.where({ isActive: true });
+    if (category) query = query.where({ category });
+    console.log('[cloudbase] where OK, calling orderBy + get...');
+    const { data } = await query
+      .orderBy('sortOrder', 'asc')
+      .orderBy('name', 'asc')
+      .get();
+    console.log('[cloudbase] query OK, got', data.length, 'dishes');
+    return data.map(normalizeDish);
+  } catch (err) {
+    console.error('[cloudbase] getActiveDishes FAILED:', err.code, err.message);
+    throw err;
+  }
 }
 
 /** 查询所有菜品（含停用，管理员用） */
