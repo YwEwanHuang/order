@@ -11,12 +11,13 @@ let db = null;
  */
 function getApp() {
   if (!app) {
-    // 云托管环境由平台自动注入 TCB_ENV_ID 等凭证
-    // @cloudbase/node-sdk 导出的是命名函数 init()，不是 default 对象
+    console.log('[cloudbase] getApp: about to require @cloudbase/node-sdk');
     const { init } = require('@cloudbase/node-sdk');
+    console.log('[cloudbase] getApp: init type =', typeof init, ', calling init({ env:', process.env.TCB_ENV_ID || process.env.ENV_ID || 'prod-d8gkzjj6ub74bba3b', '})');
     app = init({
       env: process.env.TCB_ENV_ID || process.env.ENV_ID || 'prod-d8gkzjj6ub74bba3b',
     });
+    console.log('[cloudbase] getApp: app type =', typeof app, ', has database?', typeof app.database);
   }
   return app;
 }
@@ -26,7 +27,11 @@ function getApp() {
  */
 function getDb() {
   if (!db) {
-    db = getApp().database();
+    console.log('[cloudbase] getDb: calling getApp().database()');
+    const appInstance = getApp();
+    console.log('[cloudbase] getDb: appInstance.database type =', typeof appInstance.database);
+    db = appInstance.database();
+    console.log('[cloudbase] getDb: db type =', typeof db, ', has collection?', typeof db.collection);
   }
   return db;
 }
