@@ -9,6 +9,8 @@ const {
   getNotificationJobs,
   getSubscription,
   upsertSubscription,
+  updateNotificationStatus,
+  consumeQuota,
 } = require('../db/cloudbase');
 
 // 所有管理接口需管理员权限
@@ -127,7 +129,30 @@ router.patch('/dishes/:id', async (req, res, next) => {
 router.get('/notifications', async (req, res, next) => {
   try {
     const jobs = await getNotificationJobs(req.user.openid);
-    res.json({ data: jobs, requestId: req.requestId });
+    const decorated = jobs.map(normalizeNotificationJob);
+    res.json({ data: decorated, requestId: req.requestId });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/admin/notifications/:id/retry
+router.post('/notifications/:id/retry', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    // 重新尝试：检查额度并标记为 pending，等待云函数后续消费
+    const consumed = await consumeQuota(req.user.openid);
+    if (!consumed) {
+      return res.status(409).json({
+        error: { code: 'NO_QUOTA', message: '没有可用的订阅额度' },
+        requestId: req.requestId,
+      });
+    }
+    const updated = await updateNotificationStatus(id, 'pending', null);
+    res.status(202).json({
+      data: { id, status: 'pending' },
+      requestId: req.requestId,
+    });
   } catch (err) {
     next(err);
   }
@@ -151,3 +176,20 @@ router.post('/subscriptions', async (req, res, next) => {
 });
 
 module.exports = router;
+
+// ---------------------------------------------------------------------------
+// 通知记录规范化
+// ---------------------------------------------------------------------------
+function normalizeNotificationJob(doc) {
+  return {
+    id: doc._id,
+    mealPlanId: doc.mealPlanId,
+    mealPlanVersion: doc.mealPlanVersion,
+    channel: doc.channel,
+    status: doc.status,
+    attemptCount: doc.attemptCount || 0,
+    lastErrorCode: doc.lastErrorCode || null,
+    createdAt: new Date(doc.createdAt).toISOString(),
+    sentAt: doc.sentAt ? new Date(doc.sentAt).toISOString() : null,
+  };
+}

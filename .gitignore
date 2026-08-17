@@ -13,6 +13,7 @@ WeChatDeloy/miniprogram/domain/*.js
 WeChatDeloy/miniprogram/services/*.js
 WeChatDeloy/miniprogram/components/**/*.js
 WeChatDeloy/miniprogram/app.js
+WeChatDeloy/miniprogram/vitest.config.js
 
 # Environment and secrets
 .env

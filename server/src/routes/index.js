@@ -4,7 +4,12 @@ const { requireAuth } = require('../middleware/auth');
 
 // /me
 router.get('/me', requireAuth, (req, res) => {
-  res.json({ data: { role: req.user.role }, requestId: req.requestId });
+  // 订阅模板 ID 从环境变量读取；为空时前端不会弹订阅窗
+  const subscribeTemplateId = process.env.SUBSCRIBE_TEMPLATE_ID || '';
+  res.json({
+    data: { role: req.user.role, subscribeTemplateId },
+    requestId: req.requestId,
+  });
 });
 
 // /dishes

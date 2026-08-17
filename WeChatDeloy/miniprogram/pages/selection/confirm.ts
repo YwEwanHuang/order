@@ -1,15 +1,37 @@
 // pages/selection/confirm.ts
 import type { SelectionState } from '../../domain/selection';
-import type { MealPlanSubmit } from '../../domain/types';
+import type { MealPlan, MealPlanSubmit, NotificationStatus } from '../../domain/types';
 import { MEAL_TYPE_LABELS } from '../../domain/types';
-import { submitMealPlan, updateMealPlan, generateIdempotencyKey, ApiException } from '../../services/api';
+import {
+  submitMealPlan,
+  updateMealPlan,
+  generateIdempotencyKey,
+  fetchCurrentUser,
+  fetchAdminNotifications,
+  ApiException,
+} from '../../services/api';
+
+interface SubmitResult {
+  success: boolean;
+  message: string;
+  notificationLabel?: string;
+  notificationClass?: string;
+}
+
+const NOTIFICATION_LABELS: Record<NotificationStatus, { label: string; cls: string }> = {
+  pending: { label: '微信提醒: 待发送', cls: 'pending' },
+  sent: { label: '微信提醒: 已送达', cls: 'sent' },
+  no_quota: { label: '微信提醒: 无可用订阅额度', cls: 'no-quota' },
+  rejected: { label: '微信提醒: 未授权订阅', cls: 'rejected' },
+  failed: { label: '微信提醒: 送达失败', cls: 'failed' },
+};
 
 Page({
   data: {
     selection: null as SelectionState | null,
     submitting: false,
     note: '',
-    submitResult: null as { success: boolean; message: string } | null,
+    submitResult: null as SubmitResult | null,
     existingPlanId: null as string | null,
     existingVersion: 0,
   },
@@ -52,16 +74,26 @@ Page({
       version: existingPlanId ? existingVersion : undefined,
     };
 
+    let savedPlan: MealPlan | null = null;
     try {
       if (existingPlanId) {
-        await updateMealPlan(existingPlanId, body);
+        savedPlan = await updateMealPlan(existingPlanId, body);
       } else {
-        await submitMealPlan(body, generateIdempotencyKey());
+        savedPlan = await submitMealPlan(body, generateIdempotencyKey());
       }
-      this.setData({ submitResult: { success: true, message: '点菜已保存' } });
       // 成功后清除全局 pendingSelection
       const app = getApp<{ globalData: Record<string, unknown> }>();
       app.globalData.pendingSelection = null;
+
+      const notification = await this.loadNotificationStatus(savedPlan.id);
+      this.setData({
+        submitResult: {
+          success: true,
+          message: '点菜已保存',
+          notificationLabel: notification?.label,
+          notificationClass: notification?.cls,
+        },
+      });
     } catch (e) {
       let message = '提交失败';
       if (e instanceof ApiException) {
@@ -76,6 +108,23 @@ Page({
       this.setData({ submitResult: { success: false, message } });
     } finally {
       this.setData({ submitting: false });
+    }
+  },
+
+  /**
+   * 仅管理员提交时返回本次点菜的最新通知状态；普通用户返回 null
+   */
+  async loadNotificationStatus(mealPlanId: string): Promise<{ label: string; cls: string } | null> {
+    try {
+      const user = await fetchCurrentUser();
+      if (user.role !== 'admin') return null;
+      const notifications = await fetchAdminNotifications();
+      const match = notifications.find((n) => n.mealPlanId === mealPlanId);
+      if (!match) return null;
+      return NOTIFICATION_LABELS[match.status];
+    } catch (e) {
+      // 取不到通知状态不影响主结果
+      return null;
     }
   },
 

@@ -10,6 +10,7 @@ import type {
   MealPlan,
   MealPlanSubmit,
   CurrentUser,
+  Notification,
 } from '../domain/types';
 
 // ---------------------------------------------------------------------------
@@ -184,6 +185,18 @@ export async function uploadDishImage(tempFilePath: string): Promise<string> {
 /** 记录管理员订阅授权结果 */
 export async function recordSubscription(templateId: string, quota: number): Promise<void> {
   await request('/api/v1/admin/subscriptions', 'POST', { templateId, remainingQuota: quota });
+}
+
+/** 获取管理员通知列表 */
+export async function fetchAdminNotifications(): Promise<Notification[]> {
+  const data = await request<Notification[]>('/api/v1/admin/notifications', 'GET');
+  return handleResponse(data);
+}
+
+/** 手动重试一条失败通知 */
+export async function retryNotification(id: string): Promise<Notification> {
+  const data = await request<Notification>(`/api/v1/admin/notifications/${id}/retry`, 'POST');
+  return handleResponse(data);
 }
 
 // ---------------------------------------------------------------------------

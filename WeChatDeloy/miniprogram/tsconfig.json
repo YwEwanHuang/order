@@ -18,5 +18,5 @@
     "typeRoots": ["./typings", "./node_modules/@types"]
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "dist", "miniprogram_npm"]
+  "exclude": ["node_modules", "dist", "miniprogram_npm", "**/*.test.ts"]
 }

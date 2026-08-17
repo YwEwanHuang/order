@@ -1,14 +1,15 @@
 // pages/profile/index.ts
-import { fetchCurrentUser } from '../../services/api';
-import { ApiException } from '../../services/api';
+import { fetchCurrentUser, recordSubscription, ApiException } from '../../services/api';
 
 Page({
   data: {
     loading: false,
     userRole: 'unknown' as 'user' | 'admin' | 'unknown',
+    subscribeTemplateId: '',
     subscriptionEnabled: false,
     remainingQuota: 0,
     showSubscriptionTip: false,
+    showTemplateMissingTip: false,
   },
 
   onShow() {
@@ -19,7 +20,11 @@ Page({
     this.setData({ loading: true });
     try {
       const user = await fetchCurrentUser();
-      this.setData({ userRole: user.role, loading: false });
+      this.setData({
+        userRole: user.role,
+        subscribeTemplateId: user.subscribeTemplateId || '',
+        loading: false,
+      });
     } catch (e) {
       if (e instanceof ApiException && e.code === 'UNAUTHORIZED') {
         this.setData({ userRole: 'unknown', loading: false });
@@ -29,22 +34,48 @@ Page({
     }
   },
 
-  onSubscribeTap() {
-    wx.requestSubscribeMessage({
-      tmplIds: [this.getTemplateId()],
-      success: (res: Record<string, string>) => {
-        if (res[this.getTemplateId()] === 'accept') {
-          this.setData({ subscriptionEnabled: true, remainingQuota: 1 });
+  async onSubscribeTap() {
+    const { subscribeTemplateId, userRole } = this.data;
+
+    if (!subscribeTemplateId) {
+      this.setData({ showTemplateMissingTip: true });
+      return;
+    }
+    if (userRole !== 'admin') {
+      wx.showToast({ title: '仅管理员可订阅提醒', icon: 'none' });
+      return;
+    }
+
+    try {
+      const res = await new Promise<Record<string, string>>((resolve, reject) => {
+        wx.requestSubscribeMessage({
+          tmplIds: [subscribeTemplateId],
+          success: (r) => resolve(r as Record<string, string>),
+          fail: (err) => reject(err),
+        });
+      });
+      const accepted = res[subscribeTemplateId] === 'accept';
+      if (accepted) {
+        try {
+          await recordSubscription(subscribeTemplateId, 1);
+          this.setData({
+            subscriptionEnabled: true,
+            remainingQuota: 1,
+            showSubscriptionTip: false,
+          });
           wx.showToast({ title: '订阅成功', icon: 'success' });
-        } else {
-          this.setData({ subscriptionEnabled: false });
-          this.setData({ showSubscriptionTip: true });
+        } catch (e) {
+          wx.showToast({ title: '记录订阅失败', icon: 'none' });
         }
-      },
-      fail: () => {
-        this.setData({ showSubscriptionTip: true });
-      },
-    });
+      } else {
+        this.setData({
+          subscriptionEnabled: false,
+          showSubscriptionTip: true,
+        });
+      }
+    } catch (e) {
+      this.setData({ showSubscriptionTip: true });
+    }
   },
 
   onNotificationTap() {
@@ -63,8 +94,7 @@ Page({
     wx.navigateTo({ url: '/pages/admin/dishes/index' });
   },
 
-  getTemplateId(): string {
-    // 实际模板 ID 从环境变量或后端获取
-    return 'TEMPLATE_ID_PLACEHOLDER';
+  onDismissTip() {
+    this.setData({ showSubscriptionTip: false, showTemplateMissingTip: false });
   },
 });

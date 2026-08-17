@@ -33,7 +33,8 @@
   <!-- 提交结果 -->
   <view wx:if="{{submitResult}}" class="result-banner {{submitResult.success ? 'success' : 'fail'}}">
     <text>{{submitResult.message}}</text>
-    <text wx:if="{{submitResult.success}}" class="hint">可在"记录"中查看和修改</text>
+    <text wx:if="{{submitResult.notificationLabel}}" class="notification-line {{submitResult.notificationClass}}">{{submitResult.notificationLabel}}</text>
+    <text wx:if="{{submitResult.success && !submitResult.notificationLabel}}" class="hint">可在"记录"中查看和修改</text>
   </view>
 
   <!-- 提交按钮 -->

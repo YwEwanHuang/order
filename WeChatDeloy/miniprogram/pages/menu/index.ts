@@ -1,5 +1,5 @@
 // pages/menu/index.ts
-import { getToday, inferMealTypeFromTime, generateDateOptions } from '../../domain/date';
+import { getToday, inferMealTypeFromTime } from '../../domain/date';
 import {
   SelectionState,
   createInitialState,
@@ -7,26 +7,21 @@ import {
   changeDate,
   changeMealType,
   hasUnsavedChanges,
-  isSelected,
   getSelectedCount,
 } from '../../domain/selection';
 import type { MealType, Dish } from '../../domain/types';
 import { fetchDishes } from '../../services/api';
 
+type DishWithSelected = Dish & { selected: boolean };
+
 Page({
   data: {
-    // 页面状态
     loading: false,
     error: '',
-    // 选择篮状态（共享）
     selection: {} as SelectionState,
-    // 日期选择器选项
-    dateOptions: generateDateOptions(),
-    // 当前选中的分类
+    selectedCount: 0,
+    dishes: [] as DishWithSelected[],
     currentCategory: 'hot',
-    // 菜品列表
-    dishes: [] as Dish[],
-    // 是否显示切换确认弹窗
     showSwitchConfirm: false,
     pendingSwitch: null as { type: 'date' | 'mealType'; value: string } | null,
   },
@@ -35,12 +30,11 @@ Page({
     const today = getToday();
     const defaultMealType = inferMealTypeFromTime();
     const selection = createInitialState(today, defaultMealType);
-    this.setData({ selection });
+    this.setData({ selection, selectedCount: 0 });
     this.loadDishes();
   },
 
   onShow() {
-    // 每次打开页面刷新菜品列表
     this.loadDishes();
   },
 
@@ -48,11 +42,18 @@ Page({
     this.setData({ loading: true, error: '' });
     try {
       const dishes = await fetchDishes(this.data.currentCategory);
-      this.setData({ dishes, loading: false });
+      const decorated = this.markSelected(dishes);
+      this.setData({ dishes: decorated, loading: false });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '加载失败';
       this.setData({ error: msg, loading: false });
     }
+  },
+
+  markSelected(dishes: Dish[]): DishWithSelected[] {
+    const { selection } = this.data;
+    const selectedIds = new Set(selection.items.map(i => i.dishId));
+    return dishes.map(d => ({ ...d, selected: selectedIds.has(d.id) }));
   },
 
   onCategoryChange(e: any) {
@@ -91,9 +92,18 @@ Page({
 
   onDishTap(e: any) {
     const dish = e.currentTarget.dataset.dish as Dish;
-    const { selection } = this.data;
+    const { selection, dishes } = this.data;
     const newSelection = toggleDish(selection, dish);
-    this.setData({ selection: newSelection });
+    const selectedIds = new Set(newSelection.items.map(i => i.dishId));
+    const newDishes = dishes.map(d => ({
+      ...d,
+      selected: selectedIds.has(d.id),
+    }));
+    this.setData({
+      selection: newSelection,
+      dishes: newDishes,
+      selectedCount: getSelectedCount(newSelection),
+    });
   },
 
   onConfirmSwitch() {
@@ -114,12 +124,14 @@ Page({
 
   doChangeDate(newDate: string) {
     const selection = changeDate(this.data.selection, newDate);
-    this.setData({ selection });
+    const dishes = this.data.dishes.map(d => ({ ...d, selected: false }));
+    this.setData({ selection, dishes, selectedCount: 0 });
   },
 
   doChangeMealType(newMealType: MealType) {
     const selection = changeMealType(this.data.selection, newMealType);
-    this.setData({ selection });
+    const dishes = this.data.dishes.map(d => ({ ...d, selected: false }));
+    this.setData({ selection, dishes, selectedCount: 0 });
   },
 
   onGoToConfirm() {
@@ -128,17 +140,8 @@ Page({
       wx.showToast({ title: '请先选择菜品', icon: 'none' });
       return;
     }
-    // 将选择篮状态通过事件传递（也可通过 getCurrentPages 共享）
     const app = getApp<{ globalData: Record<string, unknown> }>();
     app.globalData.pendingSelection = selection;
     wx.navigateTo({ url: '/pages/selection/confirm' });
-  },
-
-  isSelected(dishId: string): boolean {
-    return isSelected(this.data.selection, dishId);
-  },
-
-  getSelectedCount(): number {
-    return getSelectedCount(this.data.selection);
   },
 });

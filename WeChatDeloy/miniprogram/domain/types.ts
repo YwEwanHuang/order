@@ -105,4 +105,31 @@ export type UserRole = 'user' | 'admin' | 'unknown';
  */
 export interface CurrentUser {
   role: UserRole;
+  /** 订阅消息模板 ID；空字符串表示后端未配置 */
+  subscribeTemplateId?: string;
+}
+
+/**
+ * 通知渠道
+ */
+export type NotificationChannel = 'in_app' | 'wechat_subscribe';
+
+/**
+ * 通知状态
+ */
+export type NotificationStatus = 'pending' | 'sent' | 'no_quota' | 'rejected' | 'failed';
+
+/**
+ * 通知记录（管理员视图）
+ */
+export interface Notification {
+  id: string;
+  mealPlanId: string;
+  mealPlanVersion: number;
+  channel: NotificationChannel;
+  status: NotificationStatus;
+  attemptCount: number;
+  lastErrorCode?: string | null;
+  createdAt: string;
+  sentAt?: string | null;
 }

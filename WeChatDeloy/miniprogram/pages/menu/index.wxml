@@ -56,7 +56,7 @@
     <view
       wx:for="{{dishes}}"
       wx:key="id"
-      class="dish-card {{isSelected(item.id) ? 'selected' : ''}}"
+      class="dish-card {{item.selected ? 'selected' : ''}}"
       data-dish="{{item}}"
       bindtap="onDishTap"
     >
@@ -68,8 +68,8 @@
         <text wx:if="{{item.description}}" class="dish-desc">{{item.description}}</text>
       </view>
       <view class="dish-check">
-        <view class="check-icon {{isSelected(item.id) ? 'checked' : ''}}">
-          <text wx:if="{{isSelected(item.id)}}">✓</text>
+        <view class="check-icon {{item.selected ? 'checked' : ''}}">
+          <text wx:if="{{item.selected}}">✓</text>
         </view>
       </view>
     </view>
@@ -78,12 +78,12 @@
   <!-- 底部选择篮 -->
   <view class="bottom-bar">
     <view class="basket-summary">
-      <text>已选 {{getSelectedCount()}} 道菜</text>
+      <text>已选 {{selectedCount}} 道菜</text>
     </view>
     <button
       class="confirm-btn"
       bindtap="onGoToConfirm"
-      disabled="{{getSelectedCount() === 0}}"
+      disabled="{{selectedCount === 0}}"
     >
       去确认
     </button>
