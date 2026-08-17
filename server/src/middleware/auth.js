@@ -53,4 +53,4 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requireAdmin, resolveUser };
+module.exports = { requireAuth, requireAdmin, resolveUser, getAdminOpenids };

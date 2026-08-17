@@ -1,0 +1,14 @@
+{
+  "name": "notify-admin",
+  "version": "1.0.0",
+  "description": "蔓蔓点菜 - 通知发送云函数（站内 / 微信订阅消息）",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "wx-server-sdk": "~2.4.0"
+  }
+}

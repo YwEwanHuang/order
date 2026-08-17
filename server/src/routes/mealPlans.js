@@ -1,14 +1,47 @@
 const express = require('express');
 const router = express.Router();
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, getAdminOpenids } = require('../middleware/auth');
 const {
   getMealPlansByUser,
   upsertMealPlan,
   getMealPlanById,
   createNotificationJob,
   getSubscription,
-  consumeQuota,
 } = require('../db/cloudbase');
+
+/**
+ * 提交后为每个管理员入队通知：
+ * - in_app 兜底通知：所有管理员都能看到
+ * - wechat_subscribe：仅当该管理员有订阅额度时创建（consumeQuota 原子扣减）
+ */
+function enqueueNotifications(planId, planVersion) {
+  const adminOpenids = getAdminOpenids();
+  if (adminOpenids.length === 0) {
+    // 未配置管理员时，落到提交者本人；不影响主流程
+    createNotificationJob(planId, planVersion, 'in_app', 'unknown-admin')
+      .catch(console.error);
+    return;
+  }
+  for (const adminOpenid of adminOpenids) {
+    createNotificationJob(planId, planVersion, 'in_app', adminOpenid)
+      .catch(console.error);
+    consumeAndEnqueueSubscribe(planId, planVersion, adminOpenid);
+  }
+}
+
+/**
+ * 消费一条订阅额度并入队微信订阅消息通知；无额度时跳过
+ */
+async function consumeAndEnqueueSubscribe(planId, planVersion, adminOpenid) {
+  try {
+    const { consumeQuota } = require('../db/cloudbase');
+    const consumed = await consumeQuota(adminOpenid);
+    if (!consumed) return;
+    await createNotificationJob(planId, planVersion, 'wechat_subscribe', adminOpenid);
+  } catch (e) {
+    console.error('enqueue wechat_subscribe failed:', e);
+  }
+}
 
 // GET /api/v1/meal-plans
 router.get('/', requireAuth, async (req, res, next) => {
@@ -50,9 +83,8 @@ router.post('/', requireAuth, async (req, res, next) => {
       undefined // 首次提交不传 version
     );
 
-    // 异步创建通知任务（不阻塞响应）
-    createNotificationJob(plan.id, plan.version, 'in_app', req.user.openid)
-      .catch(console.error);
+    // 异步入队通知（不阻塞响应）
+    enqueueNotifications(plan.id, plan.version);
 
     res.status(201).json({ data: plan, requestId: req.requestId });
   } catch (err) {
@@ -97,8 +129,7 @@ router.put('/:id', requireAuth, async (req, res, next) => {
       version
     );
 
-    createNotificationJob(plan.id, plan.version, 'in_app', req.user.openid)
-      .catch(console.error);
+    enqueueNotifications(plan.id, plan.version);
 
     res.json({ data: plan, requestId: req.requestId });
   } catch (err) {
