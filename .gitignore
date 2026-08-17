@@ -2,9 +2,17 @@
 node_modules/
 miniprogram_npm/
 
-# Build outputs
-dist/
-.miniprogram/
+# Build outputs (TypeScript compiles .ts → .js alongside source)
+# Exclude compiled .js in miniprogram dir, but keep server/ JS
+WeChatDeloy/ts-out/
+WeChatDeloy/miniprogram/dist/
+WeChatDeloy/miniprogram/pages/*/*.js
+WeChatDeloy/miniprogram/pages/*/*/*.js
+WeChatDeloy/miniprogram/pages/*/*/*/*.js
+WeChatDeloy/miniprogram/domain/*.js
+WeChatDeloy/miniprogram/services/*.js
+WeChatDeloy/miniprogram/components/**/*.js
+WeChatDeloy/miniprogram/app.js
 
 # Environment and secrets
 .env
@@ -39,3 +47,6 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+
+# Git internals
+HANDOFF.md
