@@ -146,6 +146,12 @@ export async function updateMealPlan(
 // 管理端 API（仅管理员可用）
 // ---------------------------------------------------------------------------
 
+/** 按 ID 获取单个菜品 */
+export async function fetchDishById(id: string): Promise<Dish> {
+  const data = await request<Dish>(`/api/v1/admin/dishes/${id}`, 'GET');
+  return handleResponse(data);
+}
+
 /** 获取所有菜品（含停用） */
 export async function fetchAdminDishes(): Promise<Dish[]> {
   const data = await request<Dish[]>('/api/v1/admin/dishes', 'GET');
@@ -193,11 +199,12 @@ export function generateIdempotencyKey(): string {
 // 类型扩展（微信原有 getApp 类型）
 // ---------------------------------------------------------------------------
 
-interface IAppOption {
+export interface IAppOption {
   globalData: {
     cloudEnvId?: string;
     cloudServiceName?: string;
     cloudBaseUrl?: string;
+    pendingSelection?: unknown;
     [key: string]: unknown;
   };
 }

@@ -3,16 +3,21 @@
  */
 
 const MAX_FUTURE_DAYS = 30;
-const SHANGHAI_TZ = 'Asia/Shanghai';
+
+/**
+ * 获取上海时区（UTC+8）的当前 Date 对象
+ */
+function getShanghaiDate(): Date {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  return new Date(utc + 8 * 3600000);
+}
 
 /**
  * 获取上海时区今天的日期字符串
  */
 export function getToday(): string {
-  const now = new Date();
-  const shanghaiDate = new Date(
-    now.toLocaleString('en-US', { timeZone: SHANGHAI_TZ })
-  );
+  const shanghaiDate = getShanghaiDate();
   return formatDate(shanghaiDate);
 }
 
@@ -89,10 +94,7 @@ export function generateDateOptions(): Array<{ value: string; label: string }> {
  * 早餐 5:00-10:00，午餐 10:00-14:00，晚餐 17:00-22:00
  */
 export function inferMealTypeFromTime(): 'breakfast' | 'lunch' | 'dinner' {
-  const now = new Date();
-  const shanghaiNow = new Date(
-    now.toLocaleString('en-US', { timeZone: SHANGHAI_TZ })
-  );
+  const shanghaiNow = getShanghaiDate();
   const hour = shanghaiNow.getHours();
 
   if (hour < 10) return 'breakfast';

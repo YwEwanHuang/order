@@ -37,7 +37,8 @@ export interface Dish {
   category: DishCategory;
   description?: string;
   imageUrl?: string; // 占位图或云存储 URL
-  sortOrder: number;
+  isActive: boolean; // 是否启用（启用后用户可见）
+  sortOrder: number; // 排序权重
 }
 
 /**

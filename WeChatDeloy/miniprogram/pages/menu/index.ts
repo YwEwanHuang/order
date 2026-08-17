@@ -55,13 +55,13 @@ Page({
     }
   },
 
-  onCategoryChange(e: WechatMiniprogram.ComponentInstance) {
+  onCategoryChange(e: any) {
     const category = e.currentTarget.dataset.category as string;
     this.setData({ currentCategory: category });
     this.loadDishes();
   },
 
-  onDateChange(e: WechatMiniprogram.ComponentInstance) {
+  onDateChange(e: any) {
     const newDate = e.detail.value as string;
     const { selection } = this.data;
 
@@ -75,7 +75,7 @@ Page({
     }
   },
 
-  onMealTypeChange(e: WechatMiniprogram.ComponentInstance) {
+  onMealTypeChange(e: any) {
     const newMealType = e.detail.value as MealType;
     const { selection } = this.data;
 
@@ -89,7 +89,7 @@ Page({
     }
   },
 
-  onDishTap(e: WechatMiniprogram.ComponentInstance) {
+  onDishTap(e: any) {
     const dish = e.currentTarget.dataset.dish as Dish;
     const { selection } = this.data;
     const newSelection = toggleDish(selection, dish);
@@ -129,7 +129,7 @@ Page({
       return;
     }
     // 将选择篮状态通过事件传递（也可通过 getCurrentPages 共享）
-    const app = getApp();
+    const app = getApp<{ globalData: Record<string, unknown> }>();
     app.globalData.pendingSelection = selection;
     wx.navigateTo({ url: '/pages/selection/confirm' });
   },

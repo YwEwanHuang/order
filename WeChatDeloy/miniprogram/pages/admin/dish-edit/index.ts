@@ -1,7 +1,7 @@
 // pages/admin/dish-edit/index.ts
 import type { Dish, DishCategory } from '../../../domain/types';
 import { DISH_CATEGORY_LABELS, DISH_CATEGORIES } from '../../../domain/types';
-import { createDish, updateDish, uploadDishImage, ApiException } from '../../../services/api';
+import { createDish, updateDish, uploadDishImage, fetchDishById, ApiException } from '../../../services/api';
 
 Page({
   data: {
@@ -10,7 +10,7 @@ Page({
     name: '',
     category: 'hot' as DishCategory,
     description: '',
-    imageFileId: '',
+    imageUrl: '',
     imageTempPath: '',
     sortOrder: 0,
     saving: false,
@@ -18,22 +18,33 @@ Page({
     categories: DISH_CATEGORIES,
   },
 
-  onLoad(options: { id?: string }) {
+  async onLoad(options: { id?: string }) {
     if (options.id) {
       this.setData({ isEdit: true, dishId: options.id });
-      // TODO: 加载已有菜品数据
+      try {
+        const dish = await fetchDishById(options.id);
+        this.setData({
+          name: dish.name,
+          category: dish.category,
+          description: dish.description || '',
+          imageUrl: dish.imageUrl || '',
+          sortOrder: dish.sortOrder,
+        });
+      } catch (e) {
+        this.setData({ error: '加载菜品失败' });
+      }
     }
   },
 
-  onNameInput(e: WechatMiniprogram.Input) {
+  onNameInput(e: any) {
     this.setData({ name: e.detail.value });
   },
 
-  onDescriptionInput(e: WechatMiniprogram.Input) {
+  onDescriptionInput(e: any) {
     this.setData({ description: e.detail.value });
   },
 
-  onCategoryChange(e: WechatMiniprogram.Picker) {
+  onCategoryChange(e: any) {
     const index = e.detail.value as number;
     this.setData({ category: DISH_CATEGORIES[index] });
   },
@@ -41,12 +52,12 @@ Page({
   async onChooseImage() {
     const res = await wx.chooseImage({ count: 1, sizeType: ['compressed'] });
     const tempFilePath = res.tempFilePaths[0];
-    this.setData({ imageTempPath: tempFilePath });
+    this.setData({ imageTempPath: tempFilePath, imageUrl: '' });
   },
 
   async onSave() {
-    const { name, category, description, imageTempPath, saving, isEdit, dishId } = this.data;
-    if (!name.trim()) {
+    const { name, category, description, imageTempPath, saving, isEdit, dishId } = this.data as any;
+    if (!name?.trim()) {
       wx.showToast({ title: '请输入菜品名称', icon: 'none' });
       return;
     }
@@ -58,7 +69,7 @@ Page({
     this.setData({ saving: true, error: '' });
 
     try {
-      let imageFileId = '';
+      let imageFileId = this.data.imageUrl || '';
       if (imageTempPath) {
         imageFileId = await uploadDishImage(imageTempPath);
       }
@@ -66,15 +77,16 @@ Page({
       const body = {
         name: name.trim(),
         category,
-        description: description.trim() || undefined,
+        description: description?.trim() || undefined,
         imageUrl: imageFileId || undefined,
-        sortOrder: 0,
+        isActive: true,
+        sortOrder: this.data.sortOrder,
       };
 
       if (isEdit) {
         await updateDish(dishId, body);
       } else {
-        await createDish(body);
+        await createDish(body as Omit<Dish, 'id'>);
       }
 
       wx.showToast({ title: '保存成功', icon: 'success' });

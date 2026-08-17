@@ -32,7 +32,7 @@ Page({
   onSubscribeTap() {
     wx.requestSubscribeMessage({
       tmplIds: [this.getTemplateId()],
-      success: (res) => {
+      success: (res: Record<string, string>) => {
         if (res[this.getTemplateId()] === 'accept') {
           this.setData({ subscriptionEnabled: true, remainingQuota: 1 });
           wx.showToast({ title: '订阅成功', icon: 'success' });

@@ -43,9 +43,9 @@ Page({
     return grouped;
   },
 
-  onModifyTap(e: WechatMiniprogram.TouchEvent & { currentTarget: { dataset: { plan: MealPlan } } }) {
+  onModifyTap(e: any & { currentTarget: { dataset: { plan: MealPlan } } }) {
     const plan = e.currentTarget.dataset.plan;
-    const app = getApp();
+    const app = getApp<{ globalData: Record<string, unknown> }>();
     app.globalData.pendingSelection = {
       date: plan.date,
       mealType: plan.mealType,

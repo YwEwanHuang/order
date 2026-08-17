@@ -2,10 +2,10 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-COPY server/package*.json ./
+COPY package*.json ./
 RUN npm ci --only=production
 
-COPY server/src/ ./src/
+COPY src/ ./src/
 
 ENV PORT=8080
 ENV NODE_ENV=production

@@ -9,7 +9,7 @@
     "verify": "npm run typecheck"
   },
   "devDependencies": {
-    "typescript": "^5.4.0"
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=22"

@@ -15,7 +15,7 @@ Page({
   },
 
   onLoad(options: { planId?: string; version?: string }) {
-    const app = getApp();
+    const app = getApp<{ globalData: Record<string, unknown> }>();
     const selection = app.globalData.pendingSelection as SelectionState | undefined;
 
     if (!selection || selection.items.length === 0) {
@@ -31,7 +31,7 @@ Page({
     });
   },
 
-  onNoteInput(e: WechatMiniprogram.Input) {
+  onNoteInput(e: any) {
     const value = e.detail.value as string;
     // 最多 100 字
     if (value.length > 100) return;
@@ -60,7 +60,7 @@ Page({
       }
       this.setData({ submitResult: { success: true, message: '点菜已保存' } });
       // 成功后清除全局 pendingSelection
-      const app = getApp();
+      const app = getApp<{ globalData: Record<string, unknown> }>();
       app.globalData.pendingSelection = null;
     } catch (e) {
       let message = '提交失败';

@@ -1,7 +1,6 @@
 // app.ts
-import type { IAppOption } from './services/api';
 
-App<IAppOption>({
+App({
   globalData: {
     // 云托管配置（由微信云托管网关注入，客户端代码不包含真实值）
     // 真实值通过环境变量配置在云托管侧

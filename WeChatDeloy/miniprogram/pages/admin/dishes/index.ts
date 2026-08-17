@@ -31,18 +31,23 @@ Page({
     wx.navigateTo({ url: '/pages/admin/dish-edit/index' });
   },
 
-  onEditTap(e: WechatMiniprogram.TouchEvent & { currentTarget: { dataset: { dish: Dish } } }) {
-    wx.navigateTo({ url: `/pages/admin/dish-edit/index?id=${e.currentTarget.dataset.dish.id}` });
+  onEditTap(e: any) {
+    const dish = e.currentTarget.dataset.dish as Dish;
+    wx.navigateTo({ url: `/pages/admin/dish-edit/index?id=${dish.id}` });
   },
 
-  async onToggleActive(e: WechatMiniprogram.TouchEvent & { currentTarget: { dataset: { dish: Dish } } }) {
-    const dish = e.currentTarget.dataset.dish;
-    const newActive = !dish.sortOrder; // sortOrder used as isActive proxy since no isActive field
+  async onToggleActive(e: any) {
+    const dish = e.currentTarget.dataset.dish as Dish;
     try {
-      await updateDish(dish.id, { sortOrder: newActive ? 1 : 0 });
+      await updateDish(dish.id, { isActive: !dish.isActive });
       this.loadDishes();
     } catch (e) {
       wx.showToast({ title: '操作失败', icon: 'none' });
     }
+  },
+
+  onFilterCategory(e: any) {
+    const category = e.currentTarget.dataset.category as string;
+    this.setData({ filterCategory: category === this.data.filterCategory ? '' : category });
   },
 });
