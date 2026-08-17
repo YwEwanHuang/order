@@ -14,6 +14,14 @@ export const MEAL_TYPE_LABELS: Record<MealType, string> = {
 export const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner'];
 
 /**
+ * 餐次类型守卫：把未知字符串收敛到 MealType
+ * 注意大小写敏感（与 API 契约保持一致）
+ */
+export function isValidMealType(value: unknown): value is MealType {
+  return value === 'breakfast' || value === 'lunch' || value === 'dinner';
+}
+
+/**
  * 菜品分类枚举
  */
 export type DishCategory = 'hot' | 'cold' | 'soup' | 'staple' | 'dessert';

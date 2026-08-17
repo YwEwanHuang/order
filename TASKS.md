@@ -53,7 +53,14 @@
 
 ## M3：点菜主流程
 
-- [ ] T-030 实现日期、餐次、选择篮纯函数和单元测试
+- [x] T-030 实现日期、餐次、选择篮纯函数和单元测试
+  - `domain/types`：新增 `isValidMealType` 类型守卫
+  - `domain/date`：新增 `ValidationResult` 和 `validateDateForMealPlan`（含格式与范围）
+  - `domain/selection`：新增常量 `MIN_SELECTION_ITEMS=1` / `MAX_SELECTION_ITEMS=20` / `MAX_NOTE_LENGTH=100`
+  - `domain/selection`：新增 `validateSelectionForSubmit` / `validateNote` / `buildSubmitBody` / `shouldConfirmOnSwitch` / `generateIdempotencyKey` / `itemsFingerprint`
+  - 选择篮选择函数保留不变（addDish/removeDish/toggleDish/changeDate/changeMealType/...）
+  - `vitest.config.ts` 增加 `resolve.extensions: ['.ts', ...]` 让 vitest 在 `.ts`/`.js` 同时存在时优先 `.ts`，与 devtools 依赖的 tsc 产物 .js 不冲突
+  - 93 单元测试通过（domain 共 3 文件）、tsc 编译通过
 - [ ] T-031 建立 `meal_plans`、确定性 ID、事务与索引
 - [ ] T-032 实现首次提交、幂等、查询、版本冲突和修改 API
 - [ ] T-033 实现首页选择、确认页、成功/失败反馈和点菜记录页
@@ -94,7 +101,7 @@
 | M0 | 4 | 3 | 0 | 1（T-003 等待用户真机操作） |
 | M1 | 5 | 2 | 0 | 3（方案 B：云托管已有 Express，跳过本地开发） |
 | M2 | 5 | 5（T-020,T-021,T-022,T-023,T-024） | 0 | 0 |
-| M3 | 5 | 0 | 0 | 0 |
+| M3 | 5 | 1（T-030） | 0 | 0 |
 | M4 | 5 | 0 | 0 | 0 |
 | M5 | 5 | 0 | 0 | 0 |
-| **合计** | **29** | **8** | **0** | **4** |
+| **合计** | **29** | **9** | **0** | **4** |

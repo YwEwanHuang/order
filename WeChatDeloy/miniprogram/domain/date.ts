@@ -144,3 +144,26 @@ export function getMaxSelectableDate(): string {
   d.setDate(d.getDate() + MAX_FUTURE_DAYS);
   return formatDate(d);
 }
+
+/**
+ * 点菜日期校验结果（与选择篮/提交共用 ValidationResult）
+ */
+export interface ValidationResult {
+  ok: boolean;
+  reason?: string;
+  field?: 'items' | 'note' | 'date';
+}
+
+/**
+ * 校验点菜日期是否在允许范围内（今天至未来 30 天）
+ * @returns 当 ok=false 时,reason 可直接展示给用户
+ */
+export function validateDateForMealPlan(dateStr: string): ValidationResult {
+  if (typeof dateStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return { ok: false, field: 'date', reason: '日期格式不正确' };
+  }
+  if (!isDateInRange(dateStr)) {
+    return { ok: false, field: 'date', reason: '请选择今天至未来 30 天内的日期' };
+  }
+  return { ok: true };
+}

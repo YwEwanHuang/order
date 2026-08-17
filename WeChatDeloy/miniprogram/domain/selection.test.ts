@@ -14,7 +14,17 @@ import {
   changeDate,
   changeMealType,
   createInitialState,
+  validateSelectionForSubmit,
+  validateNote,
+  buildSubmitBody,
+  shouldConfirmOnSwitch,
+  generateIdempotencyKey,
+  itemsFingerprint,
+  MIN_SELECTION_ITEMS,
+  MAX_SELECTION_ITEMS,
+  MAX_NOTE_LENGTH,
 } from './selection';
+import { isValidMealType } from './types';
 
 const baseState = createInitialState('2026-08-17', 'lunch');
 
@@ -148,5 +158,271 @@ describe('changeMealType', () => {
   it('updates mealType and clears items', () => {
     const next = changeMealType(addDish(baseState, dishA), 'dinner');
     expect(next).toEqual({ date: '2026-08-17', mealType: 'dinner', items: [] });
+  });
+});
+
+// ---------- T-030 新增：餐次类型守卫 ----------
+describe('isValidMealType', () => {
+  it('accepts the three valid meal types', () => {
+    expect(isValidMealType('breakfast')).toBe(true);
+    expect(isValidMealType('lunch')).toBe(true);
+    expect(isValidMealType('dinner')).toBe(true);
+  });
+
+  it('rejects unknown values', () => {
+    expect(isValidMealType('snack')).toBe(false);
+    expect(isValidMealType('')).toBe(false);
+    expect(isValidMealType(null)).toBe(false);
+    expect(isValidMealType(undefined)).toBe(false);
+    expect(isValidMealType(42)).toBe(false);
+  });
+
+  it('is case-sensitive (matches API contract)', () => {
+    expect(isValidMealType('BREAKFAST')).toBe(false);
+    expect(isValidMealType('Breakfast')).toBe(false);
+  });
+});
+
+// ---------- T-030 新增：选择篮数量校验 ----------
+describe('validateSelectionForSubmit', () => {
+  it('rejects empty selection with field=items', () => {
+    const r = validateSelectionForSubmit(baseState);
+    expect(r.ok).toBe(false);
+    expect(r.field).toBe('items');
+    expect(r.reason).toContain('至少');
+  });
+
+  it('accepts exactly MIN_SELECTION_ITEMS (1)', () => {
+    const state = addDish(baseState, dishA);
+    expect(validateSelectionForSubmit(state).ok).toBe(true);
+  });
+
+  it('accepts exactly MAX_SELECTION_ITEMS (20)', () => {
+    let s = baseState;
+    for (let i = 0; i < MAX_SELECTION_ITEMS; i++) {
+      s = addDish(s, { id: `d${i}`, name: `菜${i}`, category: 'hot', isActive: true, sortOrder: i });
+    }
+    expect(s.items).toHaveLength(MAX_SELECTION_ITEMS);
+    expect(validateSelectionForSubmit(s).ok).toBe(true);
+  });
+
+  it('rejects more than MAX_SELECTION_ITEMS', () => {
+    let s = baseState;
+    for (let i = 0; i < MAX_SELECTION_ITEMS + 1; i++) {
+      s = addDish(s, { id: `d${i}`, name: `菜${i}`, category: 'hot', isActive: true, sortOrder: i });
+    }
+    const r = validateSelectionForSubmit(s);
+    expect(r.ok).toBe(false);
+    expect(r.field).toBe('items');
+    expect(r.reason).toContain(String(MAX_SELECTION_ITEMS));
+  });
+
+  it('rejects past date with field=date', () => {
+    const state = addDish(createInitialState('2020-01-01', 'lunch'), dishA);
+    const r = validateSelectionForSubmit(state);
+    expect(r.ok).toBe(false);
+    expect(r.field).toBe('date');
+  });
+
+  it('rejects out-of-range date (> +30 days) with field=date', () => {
+    const future = new Date();
+    future.setDate(future.getDate() + 60);
+    const yyyy = future.getFullYear();
+    const mm = String(future.getMonth() + 1).padStart(2, '0');
+    const dd = String(future.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const state = addDish(createInitialState(dateStr, 'lunch'), dishA);
+    expect(validateSelectionForSubmit(state).ok).toBe(false);
+  });
+
+  it('rejects malformed date string', () => {
+    const state = addDish(createInitialState('not-a-date', 'lunch'), dishA);
+    expect(validateSelectionForSubmit(state).ok).toBe(false);
+  });
+});
+
+// ---------- T-030 新增：备注长度校验 ----------
+describe('validateNote', () => {
+  it('treats undefined / null / empty as valid', () => {
+    expect(validateNote(undefined).ok).toBe(true);
+    expect(validateNote(null).ok).toBe(true);
+    expect(validateNote('').ok).toBe(true);
+  });
+
+  it('accepts a normal short note', () => {
+    expect(validateNote('少油少盐').ok).toBe(true);
+  });
+
+  it('accepts exactly MAX_NOTE_LENGTH chars', () => {
+    expect(validateNote('a'.repeat(MAX_NOTE_LENGTH)).ok).toBe(true);
+  });
+
+  it('rejects more than MAX_NOTE_LENGTH chars', () => {
+    const r = validateNote('a'.repeat(MAX_NOTE_LENGTH + 1));
+    expect(r.ok).toBe(false);
+    expect(r.field).toBe('note');
+    expect(r.reason).toContain(String(MAX_NOTE_LENGTH));
+  });
+});
+
+// ---------- T-030 新增：构造提交体 ----------
+describe('buildSubmitBody', () => {
+  it('maps SelectedDish and preserves imageUrl', () => {
+    const s = addDish(addDish(baseState, dishA), dishB);
+    const body = buildSubmitBody(s);
+    expect(body.date).toBe('2026-08-17');
+    expect(body.mealType).toBe('lunch');
+    expect(body.items).toEqual([
+      { dishId: 'a', name: '红烧肉', imageUrl: undefined },
+      { dishId: 'b', name: '凉拌黄瓜', imageUrl: 'cloud://img-b' },
+    ]);
+    expect(body.note).toBeUndefined();
+    expect(body.version).toBeUndefined();
+  });
+
+  it('includes note only when provided and non-empty', () => {
+    const s = addDish(baseState, dishA);
+    expect(buildSubmitBody(s, { note: '少油' }).note).toBe('少油');
+    expect(buildSubmitBody(s, { note: '' }).note).toBeUndefined();
+  });
+
+  it('includes version only when a finite number', () => {
+    const s = addDish(baseState, dishA);
+    expect(buildSubmitBody(s, { version: 3 }).version).toBe(3);
+    expect(buildSubmitBody(s, { version: 0 }).version).toBe(0);
+    expect(buildSubmitBody(s, { version: NaN }).version).toBeUndefined();
+    expect(buildSubmitBody(s, { version: undefined }).version).toBeUndefined();
+  });
+
+  it('does not mutate input state', () => {
+    const s = addDish(baseState, dishA);
+    const before = JSON.stringify(s);
+    buildSubmitBody(s, { note: 'x', version: 2 });
+    expect(JSON.stringify(s)).toBe(before);
+  });
+});
+
+// ---------- T-030 新增：切换确认 ----------
+describe('shouldConfirmOnSwitch', () => {
+  it('returns false when selection is empty', () => {
+    expect(shouldConfirmOnSwitch(baseState, { date: '2026-08-18' })).toBe(false);
+    expect(shouldConfirmOnSwitch(baseState, { mealType: 'dinner' })).toBe(false);
+  });
+
+  it('returns false when target equals current (no real change)', () => {
+    const s = addDish(baseState, dishA);
+    expect(shouldConfirmOnSwitch(s, { date: s.date, mealType: s.mealType })).toBe(false);
+  });
+
+  it('returns true when changing date with unsaved items', () => {
+    const s = addDish(baseState, dishA);
+    expect(shouldConfirmOnSwitch(s, { date: '2026-08-18' })).toBe(true);
+  });
+
+  it('returns true when changing mealType with unsaved items', () => {
+    const s = addDish(baseState, dishA);
+    expect(shouldConfirmOnSwitch(s, { mealType: 'dinner' })).toBe(true);
+  });
+
+  it('returns false when checking date but items are empty (only mealType provided)', () => {
+    // 提供 mealType 但与当前相同,所以无须确认
+    expect(shouldConfirmOnSwitch(baseState, { mealType: 'lunch' })).toBe(false);
+  });
+});
+
+// ---------- T-030 新增：幂等键 ----------
+describe('itemsFingerprint', () => {
+  it('is order-independent', () => {
+    const items = [
+      { dishId: 'b', name: '凉拌黄瓜' },
+      { dishId: 'a', name: '红烧肉' },
+    ];
+    const reversed = [
+      { dishId: 'a', name: '红烧肉' },
+      { dishId: 'b', name: '凉拌黄瓜' },
+    ];
+    expect(itemsFingerprint(items)).toBe(itemsFingerprint(reversed));
+  });
+
+  it('returns empty string for empty array', () => {
+    expect(itemsFingerprint([])).toBe('');
+  });
+
+  it('does not mutate input', () => {
+    const items = [
+      { dishId: 'b', name: 'B' },
+      { dishId: 'a', name: 'A' },
+    ];
+    const before = JSON.stringify(items);
+    itemsFingerprint(items);
+    expect(JSON.stringify(items)).toBe(before);
+  });
+});
+
+describe('generateIdempotencyKey', () => {
+  const items = [
+    { dishId: 'a', name: '红烧肉' },
+    { dishId: 'b', name: '凉拌黄瓜' },
+  ];
+
+  it('is deterministic for the same input', () => {
+    const a = generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items });
+    const b = generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items });
+    expect(a).toBe(b);
+  });
+
+  it('is order-independent (same items, different order → same key)', () => {
+    const reversed = [...items].reverse();
+    expect(
+      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items })
+    ).toBe(
+      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items: reversed })
+    );
+  });
+
+  it('differs when date changes', () => {
+    expect(
+      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items })
+    ).not.toBe(
+      generateIdempotencyKey({ date: '2026-08-18', mealType: 'lunch', items })
+    );
+  });
+
+  it('differs when mealType changes', () => {
+    expect(
+      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items })
+    ).not.toBe(
+      generateIdempotencyKey({ date: '2026-08-17', mealType: 'dinner', items })
+    );
+  });
+
+  it('differs when items change', () => {
+    const other = [{ dishId: 'c', name: '番茄蛋汤' }];
+    expect(
+      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items })
+    ).not.toBe(
+      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items: other })
+    );
+  });
+
+  it('differs when note changes', () => {
+    expect(
+      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items })
+    ).not.toBe(
+      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items, note: '少油' })
+    );
+  });
+
+  it('treats undefined note the same as empty string', () => {
+    expect(
+      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items })
+    ).toBe(
+      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items, note: '' })
+    );
+  });
+
+  it('has a stable prefix so it does not collide with other resource keys', () => {
+    const key = generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items });
+    expect(key.startsWith('mp:')).toBe(true);
   });
 });
