@@ -1,0 +1,247 @@
+/* pages/menu/index.wxss */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #F6F6F6;
+}
+
+.header {
+  background: #FFFFFF;
+  padding: 16rpx 24rpx;
+  border-bottom: 1rpx solid #EEEEEE;
+}
+
+.date-picker {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+.date-label {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333333;
+}
+
+.picker-arrow {
+  font-size: 20rpx;
+  color: #999999;
+  margin-left: 8rpx;
+}
+
+.meal-type-selector {
+  display: flex;
+  gap: 16rpx;
+}
+
+.meal-type-btn {
+  flex: 1;
+  text-align: center;
+  padding: 12rpx 0;
+  background: #F0F0F0;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  color: #666666;
+}
+
+.meal-type-btn.active {
+  background: #86C8A0;
+  color: #FFFFFF;
+  font-weight: 500;
+}
+
+.category-bar {
+  background: #FFFFFF;
+  white-space: nowrap;
+  padding: 0 24rpx;
+  border-bottom: 1rpx solid #EEEEEE;
+}
+
+.category-item {
+  display: inline-block;
+  padding: 16rpx 24rpx;
+  font-size: 28rpx;
+  color: #666666;
+  border-bottom: 4rpx solid transparent;
+}
+
+.category-item.active {
+  color: #86C8A0;
+  border-bottom-color: #86C8A0;
+  font-weight: 500;
+}
+
+.state-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #999999;
+  gap: 16rpx;
+}
+
+.error-text {
+  color: #E64340;
+}
+
+.dish-list {
+  flex: 1;
+  padding: 16rpx 24rpx 200rpx;
+}
+
+.dish-card {
+  display: flex;
+  align-items: center;
+  background: #FFFFFF;
+  border-radius: 12rpx;
+  padding: 20rpx;
+  margin-bottom: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+}
+
+.dish-card.selected {
+  border: 2rpx solid #86C8A0;
+  background: #F0FAF4;
+}
+
+.dish-image {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 8rpx;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.dish-image image {
+  width: 100%;
+  height: 100%;
+}
+
+.dish-info {
+  flex: 1;
+  margin-left: 20rpx;
+  display: flex;
+  flex-direction: column;
+}
+
+.dish-name {
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #333333;
+  margin-bottom: 8rpx;
+}
+
+.dish-desc {
+  font-size: 24rpx;
+  color: #999999;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dish-check {
+  margin-left: 16rpx;
+}
+
+.check-icon {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 50%;
+  border: 2rpx solid #DDDDDD;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  color: #FFFFFF;
+}
+
+.check-icon.checked {
+  background: #86C8A0;
+  border-color: #86C8A0;
+}
+
+.bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #FFFFFF;
+  border-top: 1rpx solid #EEEEEE;
+  padding: 16rpx 24rpx;
+  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+}
+
+.basket-summary {
+  flex: 1;
+}
+
+.basket-summary text {
+  font-size: 28rpx;
+  color: #666666;
+}
+
+.confirm-btn {
+  background: #86C8A0;
+  color: #FFFFFF;
+  font-size: 30rpx;
+  padding: 0 48rpx;
+  border-radius: 40rpx;
+  height: 80rpx;
+  line-height: 80rpx;
+}
+
+.confirm-btn[disabled] {
+  background: #CCCCCC;
+  color: #FFFFFF;
+}
+
+.modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  padding: 32rpx;
+  width: 600rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.modal-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333333;
+}
+
+.modal-body {
+  font-size: 28rpx;
+  color: #666666;
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+
+.modal-actions button {
+  flex: 1;
+}

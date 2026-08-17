@@ -1,0 +1,46 @@
+<!-- pages/profile/index.wxml -->
+<view class="page">
+  <!-- 用户信息 -->
+  <view class="section profile-section">
+    <view class="avatar">
+      <image src="/images/avatar.png" mode="aspectFill" />
+    </view>
+    <view class="role-badge">
+      <text>{{userRole === 'admin' ? '管理员' : userRole === 'user' ? '普通用户' : '加载中...'}}</text>
+    </view>
+  </view>
+
+  <!-- 点菜提醒 -->
+  <view class="section">
+    <view class="section-title">点菜提醒</view>
+    <view class="subscription-card">
+      <view class="subscription-info">
+        <text class="subscription-status">
+          {{subscriptionEnabled ? '已开启，下次点菜将收到微信提醒' : '未开启'}}
+        </text>
+        <text wx:if="{{subscriptionEnabled}}" class="quota-hint">剩余 {{remainingQuota}} 次授权</text>
+      </view>
+      <button size="mini" type="primary" plain bindtap="onSubscribeTap">
+        {{subscriptionEnabled ? '重新授权' : '开启提醒'}}
+      </button>
+    </view>
+    <view wx:if="{{showSubscriptionTip}}" class="subscription-tip">
+      <text>如果没有看到订阅弹窗，请在微信中开启订阅消息权限</text>
+    </view>
+  </view>
+
+  <!-- 管理功能（仅管理员） -->
+  <view wx:if="{{userRole === 'admin'}}" class="section">
+    <view class="section-title">管理功能</view>
+    <view class="menu-list">
+      <view class="menu-item" bindtap="onDishManagementTap">
+        <text>菜品管理</text>
+        <text class="arrow">›</text>
+      </view>
+      <view class="menu-item" bindtap="onNotificationTap">
+        <text>通知记录</text>
+        <text class="arrow">›</text>
+      </view>
+    </view>
+  </view>
+</view>

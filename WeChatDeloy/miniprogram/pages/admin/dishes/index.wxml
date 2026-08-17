@@ -1,0 +1,41 @@
+<!-- pages/admin/dishes/index.wxml -->
+<view class="page">
+  <view class="toolbar">
+    <button size="mini" type="primary" bindtap="onAddTap">新增菜品</button>
+  </view>
+
+  <view wx:if="{{loading}}" class="state-view">
+    <text>加载中...</text>
+  </view>
+
+  <view wx:elif="{{error}}" class="state-view">
+    <text class="error-text">{{error}}</text>
+  </view>
+
+  <view wx:elif="{{dishes.length === 0}}" class="state-view">
+    <text>暂无菜品</text>
+    <text class="sub">点击右上角新增第一道菜品</text>
+  </view>
+
+  <view wx:else class="dish-list">
+    <view wx:for="{{dishes}}" wx:key="id" class="dish-card">
+      <view class="dish-info">
+        <text class="dish-name">{{item.name}}</text>
+        <text class="dish-category">[{{item.category}}]</text>
+        <text wx:if="{{!item.sortOrder}}" class="inactive-tag">已停用</text>
+      </view>
+      <view class="dish-actions">
+        <button size="mini" bindtap="onEditTap" data-dish="{{item}}">编辑</button>
+        <button
+          size="mini"
+          type="{{item.sortOrder ? 'warn' : 'primary'}}"
+          plain
+          bindtap="onToggleActive"
+          data-dish="{{item}}"
+        >
+          {{item.sortOrder ? '停用' : '启用'}}
+        </button>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,24 @@
+<!-- pages/admin/notifications/index.wxml -->
+<view class="page">
+  <view wx:if="{{loading}}" class="state-view">
+    <text>加载中...</text>
+  </view>
+
+  <view wx:elif="{{error}}" class="state-view">
+    <text class="error-text">{{error}}</text>
+  </view>
+
+  <view wx:elif="{{notifications.length === 0}}" class="state-view">
+    <text>暂无通知记录</text>
+    <text class="sub">点菜提交后会显示在这里</text>
+  </view>
+
+  <view wx:else class="notification-list">
+    <view wx:for="{{notifications}}" wx:key="id" class="notification-card">
+      <view class="notification-content">{{item.content}}</view>
+      <view class="notification-status {{item.status}}">
+        <text>{{item.status === 'sent' ? '微信已送达' : item.status === 'in_app' ? '站内通知' : '送达失败'}}</text>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,17 @@
+{
+  "name": "manmanorder-miniprogram",
+  "version": "1.0.0",
+  "description": "蔓蔓点菜 - 微信小程序",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "verify": "npm run typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

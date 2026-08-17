@@ -1,0 +1,107 @@
+/* pages/admin/dish-edit/index.wxss */
+
+.page {
+  min-height: 100vh;
+  background: #F6F6F6;
+  padding: 24rpx;
+}
+
+.form {
+  background: #FFFFFF;
+  border-radius: 12rpx;
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.form-label {
+  font-size: 28rpx;
+  color: #666666;
+}
+
+.required {
+  color: #E64340;
+}
+
+.image-picker {
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: 12rpx;
+  overflow: hidden;
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+}
+
+.placeholder {
+  width: 100%;
+  height: 100%;
+  background: #F9F9F9;
+  border: 2rpx dashed #DDDDDD;
+  border-radius: 12rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  color: #CCCCCC;
+  font-size: 60rpx;
+}
+
+.placeholder .tip {
+  font-size: 24rpx;
+  color: #AAAAAA;
+}
+
+.form-input {
+  background: #F9F9F9;
+  border-radius: 8rpx;
+  padding: 16rpx;
+  font-size: 30rpx;
+  color: #333333;
+}
+
+.form-textarea {
+  background: #F9F9F9;
+  border-radius: 8rpx;
+  padding: 16rpx;
+  font-size: 28rpx;
+  color: #333333;
+  height: 160rpx;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.picker-value {
+  background: #F9F9F9;
+  border-radius: 8rpx;
+  padding: 16rpx;
+  font-size: 30rpx;
+  color: #333333;
+}
+
+.error-tip {
+  padding: 12rpx 16rpx;
+  background: #FFF0F0;
+  border-radius: 6rpx;
+  font-size: 26rpx;
+  color: #E64340;
+}
+
+.save-btn {
+  background: #86C8A0;
+  color: #FFFFFF;
+  border-radius: 44rpx;
+  height: 88rpx;
+  line-height: 88rpx;
+  font-size: 30rpx;
+}

@@ -1,0 +1,103 @@
+<!-- pages/menu/index.wxml -->
+<view class="page">
+  <!-- 顶部：日期 + 餐次选择 -->
+  <view class="header">
+    <picker mode="date" value="{{selection.date}}" bindchange="onDateChange">
+      <view class="date-picker">
+        <text class="date-label">{{selection.date}}</text>
+        <text class="picker-arrow">▼</text>
+      </view>
+    </picker>
+
+    <view class="meal-type-selector">
+      <view
+        wx:for="{{['breakfast', 'lunch', 'dinner']}}"
+        wx:key="index"
+        class="meal-type-btn {{selection.mealType === item ? 'active' : ''}}"
+        data-value="{{item}}"
+        bindtap="onMealTypeChange"
+      >
+        {{item === 'breakfast' ? '早餐' : item === 'lunch' ? '午餐' : '晚餐'}}
+      </view>
+    </view>
+  </view>
+
+  <!-- 分类栏 -->
+  <scroll-view scroll-x class="category-bar">
+    <view
+      wx:for="{{['hot', 'cold', 'soup', 'staple', 'dessert']}}"
+      wx:key="index"
+      class="category-item {{currentCategory === item ? 'active' : ''}}"
+      data-category="{{item}}"
+      bindtap="onCategoryChange"
+    >
+      {{item === 'hot' ? '热菜' : item === 'cold' ? '凉菜' : item === 'soup' ? '汤类' : item === 'staple' ? '主食' : '甜点'}}
+    </view>
+  </scroll-view>
+
+  <!-- 加载状态 -->
+  <view wx:if="{{loading}}" class="state-view">
+    <text>加载中...</text>
+  </view>
+
+  <!-- 错误状态 -->
+  <view wx:elif="{{error}}" class="state-view">
+    <text class="error-text">{{error}}</text>
+    <button bindtap="loadDishes" size="mini">重试</button>
+  </view>
+
+  <!-- 空状态 -->
+  <view wx:elif="{{dishes.length === 0}}" class="state-view">
+    <text>暂无菜品</text>
+  </view>
+
+  <!-- 菜品列表 -->
+  <scroll-view scroll-y class="dish-list">
+    <view
+      wx:for="{{dishes}}"
+      wx:key="id"
+      class="dish-card {{isSelected(item.id) ? 'selected' : ''}}"
+      data-dish="{{item}}"
+      bindtap="onDishTap"
+    >
+      <view class="dish-image">
+        <image src="{{item.imageUrl || '/images/default-goods-image.png'}}" mode="aspectFill" />
+      </view>
+      <view class="dish-info">
+        <text class="dish-name">{{item.name}}</text>
+        <text wx:if="{{item.description}}" class="dish-desc">{{item.description}}</text>
+      </view>
+      <view class="dish-check">
+        <view class="check-icon {{isSelected(item.id) ? 'checked' : ''}}">
+          <text wx:if="{{isSelected(item.id)}}">✓</text>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <!-- 底部选择篮 -->
+  <view class="bottom-bar">
+    <view class="basket-summary">
+      <text>已选 {{getSelectedCount()}} 道菜</text>
+    </view>
+    <button
+      class="confirm-btn"
+      bindtap="onGoToConfirm"
+      disabled="{{getSelectedCount() === 0}}"
+    >
+      去确认
+    </button>
+  </view>
+
+  <!-- 切换确认弹窗 -->
+  <view wx:if="{{showSwitchConfirm}}" class="modal-mask" bindtap="onCancelSwitch">
+    <view class="modal-content" catchtap="">
+      <text class="modal-title">切换将清空已选菜品</text>
+      <text class="modal-body">当前选择尚未提交，切换日期或餐次会清空选择篮。确定要切换吗？</text>
+      <view class="modal-actions">
+        <button bindtap="onCancelSwitch">取消</button>
+        <button type="primary" bindtap="onConfirmSwitch">确定切换</button>
+      </view>
+    </view>
+  </view>
+</view>
