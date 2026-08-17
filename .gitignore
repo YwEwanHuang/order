@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+miniprogram_npm/
+
+# Build outputs
+dist/
+.miniprogram/
+
+# Environment and secrets
+.env
+.env.*
+.env.local
+*.local
+
+# WeChat miniprogram private config (contains appid/secret)
+project.private.config.json
+envList.js
+
+# Logs
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CloudBase CLI cache
+.tcb/
+
+# Test coverage
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
