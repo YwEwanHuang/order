@@ -9,13 +9,15 @@ Page({
     dishId: '',
     name: '',
     category: 'hot' as DishCategory,
+    categoryIndex: 0,
     description: '',
     imageUrl: '',
     imageTempPath: '',
     sortOrder: 0,
+    isActive: true,
     saving: false,
     error: '',
-    categories: DISH_CATEGORIES,
+    categoryOptions: DISH_CATEGORIES.map((c) => DISH_CATEGORY_LABELS[c]),
   },
 
   async onLoad(options: { id?: string }) {
@@ -26,9 +28,11 @@ Page({
         this.setData({
           name: dish.name,
           category: dish.category,
+          categoryIndex: DISH_CATEGORIES.indexOf(dish.category),
           description: dish.description || '',
           imageUrl: dish.imageUrl || '',
           sortOrder: dish.sortOrder,
+          isActive: dish.isActive,
         });
       } catch (e) {
         this.setData({ error: '加载菜品失败' });
@@ -46,7 +50,7 @@ Page({
 
   onCategoryChange(e: any) {
     const index = e.detail.value as number;
-    this.setData({ category: DISH_CATEGORIES[index] });
+    this.setData({ category: DISH_CATEGORIES[index], categoryIndex: index });
   },
 
   async onChooseImage() {
@@ -56,7 +60,7 @@ Page({
   },
 
   async onSave() {
-    const { name, category, description, imageTempPath, saving, isEdit, dishId } = this.data as any;
+    const { name, category, description, imageTempPath, saving, isEdit, dishId, isActive, sortOrder } = this.data;
     if (!name?.trim()) {
       wx.showToast({ title: '请输入菜品名称', icon: 'none' });
       return;
@@ -79,8 +83,8 @@ Page({
         category,
         description: description?.trim() || undefined,
         imageUrl: imageFileId || undefined,
-        isActive: true,
-        sortOrder: this.data.sortOrder,
+        isActive,
+        sortOrder,
       };
 
       if (isEdit) {
@@ -95,9 +99,5 @@ Page({
       const msg = e instanceof ApiException ? e.message : '保存失败';
       this.setData({ error: msg, saving: false });
     }
-  },
-
-  getCategoryLabel(cat: DishCategory): string {
-    return DISH_CATEGORY_LABELS[cat];
   },
 });

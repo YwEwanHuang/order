@@ -33,8 +33,8 @@
     <!-- 分类 -->
     <view class="form-item">
       <view class="form-label">分类</view>
-      <picker mode="selector" range="{{categories}}" value="{{categories.indexOf(category)}}" bindchange="onCategoryChange">
-        <view class="picker-value">{{getCategoryLabel(category)}}</view>
+      <picker mode="selector" range="{{categoryOptions}}" value="{{categoryIndex}}" bindchange="onCategoryChange">
+        <view class="picker-value">{{categoryOptions[categoryIndex]}}</view>
       </picker>
     </view>
 

@@ -1,5 +1,6 @@
 // pages/admin/dishes/index.ts
-import type { Dish } from '../../../domain/types';
+import type { Dish, DishCategory } from '../../../domain/types';
+import { DISH_CATEGORY_LABELS } from '../../../domain/types';
 import { fetchAdminDishes, updateDish, ApiException } from '../../../services/api';
 
 Page({
@@ -49,5 +50,9 @@ Page({
   onFilterCategory(e: any) {
     const category = e.currentTarget.dataset.category as string;
     this.setData({ filterCategory: category === this.data.filterCategory ? '' : category });
+  },
+
+  getCategoryLabel(cat: DishCategory): string {
+    return DISH_CATEGORY_LABELS[cat] || cat;
   },
 });
