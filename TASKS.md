@@ -19,11 +19,11 @@
 
 ## M1：工程骨架与本地可复现
 
-- [ ] T-010 初始化 Git、根文档、`.gitignore`、`.gitattributes` 和 Node 版本约束
-- [ ] T-011 初始化原生 TypeScript 小程序，建立 `callContainer` 客户端封装
-- [ ] T-012 从 Express 快速模板建立后端，拆分 `app.ts` 与 `index.ts`，实现 `/health`
-- [ ] T-013 增加 Dockerfile、`.dockerignore`、测试和跨平台 `scripts/verify.mjs`
-- [ ] T-014 创建 OpenAPI 骨架、统一响应格式、错误处理中间件和 requestId
+- [x] T-010 初始化 Git、根文档、`.gitignore`、`.gitattributes` 和 Node 版本约束
+- [x] T-011 初始化原生 TypeScript 小程序，建立 `callContainer` 客户端封装
+- [-] T-012 从 Express 快速模板建立后端（云托管已部署 Express API，方案 B 跳过本地 server/）
+- [-] T-013 增加 Dockerfile、`.dockerignore`、测试和跨平台 `scripts/verify.mjs`（方案 B 跳过）
+- [-] T-014 创建 OpenAPI 骨架（依赖后端 API 实现，方案 B 暂缓）
 
 **出口标准：** 跨平台 `npm ci` + `npm run verify` 通过；Docker 镜像健康检查通过。
 
