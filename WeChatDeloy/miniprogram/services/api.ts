@@ -66,7 +66,9 @@ async function request<T>(
     data,
   });
 
-  return res as T;
+  // callContainer 的返回值是 { data, statusCode, header, cookies }，
+  // data 字段才是后端真实返回的 body。
+  return (res as { data: T }).data;
 }
 
 // ---------------------------------------------------------------------------
