@@ -10,7 +10,7 @@ import {
   getSelectedCount,
 } from '../../domain/selection';
 import type { MealType, Dish } from '../../domain/types';
-import { fetchDishes } from '../../services/api';
+import { fetchDishes, ApiException } from '../../services/api';
 
 type DishWithSelected = Dish & { selected: boolean };
 
@@ -45,8 +45,14 @@ Page({
       const decorated = this.markSelected(dishes);
       this.setData({ dishes: decorated, loading: false });
     } catch (e: unknown) {
+      console.error('[menu] loadDishes failed:', e);
+      const code = e instanceof ApiException ? e.code : '';
+      const reqId = e instanceof ApiException ? e.requestId : '';
       const msg = e instanceof Error ? e.message : '加载失败';
-      this.setData({ error: msg, loading: false });
+      this.setData({
+        error: code ? `${code}: ${msg}${reqId ? ` (${reqId})` : ''}` : msg,
+        loading: false,
+      });
     }
   },
 

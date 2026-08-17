@@ -12,8 +12,9 @@ let db = null;
 function getApp() {
   if (!app) {
     // 云托管环境由平台自动注入 TCB_ENV_ID 等凭证
-    app = require('@cloudbase/node-sdk').default;
-    app.init({
+    // @cloudbase/node-sdk 导出的是命名函数 init()，不是 default 对象
+    const { init } = require('@cloudbase/node-sdk');
+    app = init({
       env: process.env.TCB_ENV_ID || process.env.ENV_ID || 'prod-d8gkzjj6ub74bba3b',
     });
   }
