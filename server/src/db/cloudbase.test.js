@@ -1,94 +1,214 @@
 /**
- * @jest/unit db/cloudbase
- * Unit tests for cloudbase DB layer — mocked
+ * @jest/unit MySQL data layer.
  */
-const cloudbase = require('../db/cloudbase');
 
-describe('cloudbase', () => {
-  describe('getActiveDishes', () => {
-    it('D-051: returns active dishes from DB', async () => {
-      const dishes = await cloudbase.getActiveDishes();
-      expect(Array.isArray(dishes)).toBe(true);
+const mockPool = {
+  query: jest.fn(),
+  execute: jest.fn(),
+  getConnection: jest.fn(),
+};
+
+const mockConnection = {
+  beginTransaction: jest.fn(),
+  execute: jest.fn(),
+  commit: jest.fn(),
+  rollback: jest.fn(),
+  release: jest.fn(),
+};
+
+jest.mock('mysql2/promise', () => ({
+  createPool: jest.fn(() => mockPool),
+}), { virtual: true });
+
+const database = require('../db/cloudbase');
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockPool.query.mockResolvedValue([{}, []]);
+  mockPool.execute.mockResolvedValue([[], []]);
+  mockPool.getConnection.mockResolvedValue(mockConnection);
+  mockConnection.beginTransaction.mockResolvedValue();
+  mockConnection.execute.mockResolvedValue([[], []]);
+  mockConnection.commit.mockResolvedValue();
+  mockConnection.rollback.mockResolvedValue();
+});
+
+describe('MySQL data layer', () => {
+  it('creates all tables and seeds the seven initial dishes idempotently', async () => {
+    await database.ensureSchema();
+
+    const ddl = mockPool.query.mock.calls.map(([sql]) => sql).join('\n');
+    expect(ddl).toContain('CREATE DATABASE IF NOT EXISTS `manmanorder`');
+    expect(ddl).toContain('CREATE TABLE IF NOT EXISTS `manmanorder`.`dishes`');
+    expect(ddl).toContain('CREATE TABLE IF NOT EXISTS `manmanorder`.`meal_plans`');
+    expect(ddl).toContain('CREATE TABLE IF NOT EXISTS `manmanorder`.`notification_jobs`');
+    expect(ddl).toContain('CREATE TABLE IF NOT EXISTS `manmanorder`.`notification_subscriptions`');
+
+    const seedCalls = mockPool.execute.mock.calls.filter(([sql]) =>
+      sql.includes('INSERT INTO `manmanorder`.`dishes`')
+    );
+    expect(seedCalls).toHaveLength(7);
+    expect(seedCalls.map(([, values]) => values[1])).toEqual([
+      '鸡蛋西红柿',
+      '凉拌豆腐皮',
+      '土豆炖豆角',
+      '排骨冬瓜汤',
+      '清炒生菜',
+      '米饭',
+      '大米粥',
+    ]);
+  });
+
+  it('queries active dishes with parameterized category filtering', async () => {
+    mockPool.execute.mockResolvedValueOnce([[
+      {
+        id: 'dish-tomato-egg',
+        name: '鸡蛋西红柿',
+        category: 'hot',
+        description: '',
+        image_url: '',
+        is_active: 1,
+        sort_order: 10,
+      },
+    ], []]);
+
+    const dishes = await database.getActiveDishes({ category: 'hot' });
+
+    expect(mockPool.execute).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE is_active = 1 AND category = ?'),
+      ['hot']
+    );
+    expect(dishes).toEqual([expect.objectContaining({
+      id: 'dish-tomato-egg',
+      name: '鸡蛋西红柿',
+      isActive: true,
+      sortOrder: 10,
+    })]);
+  });
+
+  it('returns an owned meal plan with parsed JSON and ownership data', async () => {
+    mockPool.execute.mockResolvedValueOnce([[
+      {
+        id: 'mp_1',
+        owner_openid: 'owner-1',
+        date: '2026-08-18',
+        meal_type: 'dinner',
+        items: '[{"dishId":"dish-1","name":"米饭"}]',
+        note: '',
+        version: 2,
+        created_at: 1787011200000,
+        updated_at: 1787011200000,
+      },
+    ], []]);
+
+    const plan = await database.getMealPlanById('mp_1');
+
+    expect(plan).toMatchObject({
+      id: 'mp_1',
+      ownerOpenid: 'owner-1',
+      mealType: 'dinner',
+      version: 2,
+      items: [{ dishId: 'dish-1', name: '米饭' }],
     });
   });
 
-  describe('getAllDishes', () => {
-    it('D-052: returns all dishes regardless of active flag', async () => {
-      const dishes = await cloudbase.getAllDishes();
-      expect(Array.isArray(dishes)).toBe(true);
+  it('applies both meal-plan date bounds as SQL parameters', async () => {
+    mockPool.execute.mockResolvedValueOnce([[], []]);
+
+    await database.getMealPlansByUser('owner-1', {
+      from: '2026-08-18',
+      to: '2026-08-25',
     });
+
+    expect(mockPool.execute).toHaveBeenCalledWith(
+      expect.stringContaining('`date` >= ? AND `date` <= ?'),
+      ['owner-1', '2026-08-18', '2026-08-25']
+    );
   });
 
-  describe('getDishById', () => {
-    it('D-053: returns dish by valid id', async () => {
-      const dish = await cloudbase.getDishById('valid-id');
-      // mocked returns empty, real impl returns null or dish
-      expect(dish === null || typeof dish === 'object').toBe(true);
-    });
+  it('creates a meal plan inside a transaction', async () => {
+    mockConnection.execute
+      .mockResolvedValueOnce([[], []])
+      .mockResolvedValueOnce([{ affectedRows: 1 }, []]);
 
-    it('D-054: returns null for non-existent id', async () => {
-      const dish = await cloudbase.getDishById('non-existent-id');
-      expect(dish).toBeNull();
-    });
+    const plan = await database.upsertMealPlan(
+      'owner-1',
+      '2026-08-18',
+      'dinner',
+      [{ dishId: 'dish-rice', name: '米饭' }],
+      '',
+      undefined
+    );
+
+    expect(plan).toMatchObject({ ownerOpenid: 'owner-1', version: 1 });
+    expect(mockConnection.beginTransaction).toHaveBeenCalledTimes(1);
+    expect(mockConnection.commit).toHaveBeenCalledTimes(1);
+    expect(mockConnection.rollback).not.toHaveBeenCalled();
+    expect(mockConnection.release).toHaveBeenCalledTimes(1);
   });
 
-  describe('getMealPlansByUser', () => {
-    it('D-055: returns meal plans for given openid', async () => {
-      const plans = await cloudbase.getMealPlansByUser('test-openid');
-      expect(Array.isArray(plans)).toBe(true);
-    });
+  it('rolls back a stale meal-plan version', async () => {
+    mockConnection.execute.mockResolvedValueOnce([[
+      {
+        id: 'mp_1',
+        owner_openid: 'owner-1',
+        date: '2026-08-18',
+        meal_type: 'dinner',
+        items: '[]',
+        note: '',
+        version: 2,
+        created_at: 1787011200000,
+        updated_at: 1787011200000,
+      },
+    ], []]);
 
-    it('D-056: returns empty array for user with no plans', async () => {
-      const plans = await cloudbase.getMealPlansByUser('no-plans-openid');
-      expect(Array.isArray(plans)).toBe(true);
-    });
+    await expect(database.upsertMealPlan(
+      'owner-1',
+      '2026-08-18',
+      'dinner',
+      [{ dishId: 'dish-rice', name: '米饭' }],
+      '',
+      1
+    )).rejects.toMatchObject({ code: 'VERSION_CONFLICT', statusCode: 409 });
+
+    expect(mockConnection.rollback).toHaveBeenCalledTimes(1);
+    expect(mockConnection.commit).not.toHaveBeenCalled();
+    expect(mockConnection.release).toHaveBeenCalledTimes(1);
   });
 
-  describe('getMealPlanById', () => {
-    it('D-057: returns meal plan by id', async () => {
-      const plan = await cloudbase.getMealPlanById('valid-plan-id');
-      expect(plan === null || typeof plan === 'object').toBe(true);
-    });
-  });
-
-  describe('upsertMealPlan (mock)', () => {
-    it('D-058: throws on version conflict', async () => {
-      // The mock always succeeds; real impl throws on conflict
-      await expect(cloudbase.upsertMealPlan({
-        _id: 'some-id',
-        _openid: 'test',
-        date: '2026-08-17',
-        mealType: 'lunch',
-        items: [],
-        version: 99,
-      })).resolves.toBeDefined();
-    });
-  });
-
-  describe('createNotificationJob', () => {
-    it('D-059: creates a notification job record', async () => {
-      const job = await cloudbase.createNotificationJob({
-        mealPlanId: 'plan-1',
-        openid: 'user-1',
-        notifyType: 'submit',
+  it('normalizes notification rows for the existing route contract', async () => {
+    mockPool.execute.mockResolvedValueOnce([[
+      {
+        id: 'job-1',
+        meal_plan_id: 'mp-1',
+        meal_plan_version: 3,
+        recipient_openid: 'admin-1',
+        channel: 'in_app',
         status: 'pending',
-      });
-      expect(job).toBeDefined();
-    });
+        attempt_count: 0,
+        last_error_code: null,
+        created_at: 1787011200000,
+        sent_at: null,
+      },
+    ], []]);
+
+    await expect(database.getNotificationJobs('admin-1')).resolves.toEqual([
+      expect.objectContaining({
+        _id: 'job-1',
+        mealPlanId: 'mp-1',
+        mealPlanVersion: 3,
+        recipientOpenid: 'admin-1',
+      }),
+    ]);
   });
 
-  describe('getSubscription', () => {
-    it('D-060: returns subscription for openid', async () => {
-      const sub = await cloudbase.getSubscription('test-openid');
-      expect(sub === null || typeof sub === 'object').toBe(true);
-    });
-  });
+  it('consumes subscription quota atomically', async () => {
+    mockPool.execute.mockResolvedValueOnce([{ affectedRows: 1 }, []]);
 
-  describe('consumeQuota', () => {
-    it('D-061: returns true when quota is consumed', async () => {
-      const result = await cloudbase.consumeQuota('test-openid');
-      // mocked DB returns empty subscription, so real path returns false
-      expect(typeof result).toBe('boolean');
-    });
+    await expect(database.consumeQuota('admin-1')).resolves.toBe(true);
+    expect(mockPool.execute).toHaveBeenCalledWith(
+      expect.stringContaining('remaining_quota = remaining_quota - 1'),
+      [expect.any(Number), 'admin-1']
+    );
   });
 });

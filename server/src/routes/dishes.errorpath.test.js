@@ -1,11 +1,9 @@
 /**
  * @jest/integration
- * 真路径回归测试：复现线上 GET /api/v1/dishes → 500 的链路。
+ * 真路径回归测试：底层 MySQL 查询失败时的 API 安全边界。
  *
- * 不再用"mock SDK 永远回 []"假装集成已验证 —— 本测试让 getActiveDishes
- * 抛出一个形状与 @cloudbase/node-sdk@3.18.5 一致的真实错误
- * （err.name='Error', err.code='INVALID_PARAM', message 含
- *  'missing secretId or secretKey'），让路由 → errorHandler 链路真的跑一遍。
+ * 本测试让 getActiveDishes 抛出 mysql2 常见的鉴权错误形状，让
+ * 路由 → errorHandler 链路真的跑一遍。
  *
  * 断言三件事：
  *  1. 客户端响应是 500 + 通用 envelope，不泄露 err.message / err.code；
@@ -17,11 +15,9 @@ const express = require('express');
 
 // 关键：只 mock cloudbase 模块的 getActiveDishes，保留真实 errorHandler + auth
 jest.mock('../db/cloudbase', () => {
-  const realShapeErr = new Error(
-    'missing secretId or secretKey of tencent cloud, please set secretId and secretKey in config'
-  );
+  const realShapeErr = new Error('Access denied for database user');
   realShapeErr.name = 'Error';
-  realShapeErr.code = 'INVALID_PARAM';
+  realShapeErr.code = 'ER_ACCESS_DENIED_ERROR';
   return {
     getActiveDishes: jest.fn(async () => { throw realShapeErr; }),
     getAllDishes: jest.fn(),
@@ -64,8 +60,8 @@ afterEach(() => {
   errorSpy.mockRestore();
 });
 
-describe('GET /api/v1/dishes — 真路径 500 回归', () => {
-  it('当底层 SDK 抛 INVALID_PARAM 时返回 500 + 通用 envelope', async () => {
+describe('GET /api/v1/dishes — MySQL 错误路径', () => {
+  it('当底层 MySQL 查询失败时返回 500 + 通用 envelope', async () => {
     const app = buildApp();
     const res = await request(app)
       .get('/api/v1/dishes')
@@ -77,7 +73,7 @@ describe('GET /api/v1/dishes — 真路径 500 回归', () => {
       requestId: expect.any(String),
     });
     // 不泄露内部细节
-    expect(res.body.error.message).not.toMatch(/secretId|secretKey|INVALID_PARAM/);
+    expect(res.body.error.message).not.toMatch(/Access denied|ER_ACCESS_DENIED_ERROR/);
     expect(JSON.stringify(res.body)).not.toMatch(/user-123/);
   });
 
@@ -94,8 +90,8 @@ describe('GET /api/v1/dishes — 真路径 500 回归', () => {
       method: 'GET',
       path: '/api/v1/dishes',
       errName: 'Error',
-      errCode: 'INVALID_PARAM',
-      errMessage: expect.stringMatching(/missing secretId or secretKey/),
+      errCode: 'ER_ACCESS_DENIED_ERROR',
+      errMessage: expect.stringMatching(/Access denied/),
     });
     expect(logged.requestId).toBe(res.body.requestId);
     // 不写敏感字段

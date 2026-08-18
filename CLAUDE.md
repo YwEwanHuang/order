@@ -4,21 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-"蔓蔓点菜" (ManmanOrder) is a WeChat miniprogram for meal planning. The current codebase is in early stages — the `WeChatDeloy/` directory contains the standard WeChat cloud development quickstart template, not yet customized for the target app. The comprehensive design is documented in `DEVELOPMENT_PLAN.md`.
+"蔓蔓点菜" (ManmanOrder) is a native TypeScript WeChat miniprogram with an Express API deployed to WeChat Cloud Run. The runtime storage decision in `DECISIONS.md` supersedes older document-database assumptions in `DEVELOPMENT_PLAN.md`.
 
 ## Key Files
 
 - `DEVELOPMENT_PLAN.md` — Full product/technical specification, data models, API contracts, and phased implementation plan (M0–M5). **Read this before making any significant changes.**
 - `WeChatDeloy/project.config.json` — Miniprogram project configuration (appid, compile settings).
-- `WeChatDeloy/miniprogram/app.js` — Miniprogram entry; `env` ID must be filled in before cloud calls work.
+- `WeChatDeloy/miniprogram/app.ts` — Miniprogram entry and cloud initialization.
 - `WeChatDeloy/miniprogram/app.json` — Page registry and global window config.
 - `WeChatDeloy/cloudfunctions/quickstartFunctions/index.js` — Template cloud function; will be replaced with `notify-admin` and other business functions per the development plan.
 
 ## Tech Stack
 
-- **Frontend**: Native WeChat miniprogram with JavaScript (per template; TypeScript planned per development plan).
-- **Backend**: Cloud functions (wx-server-sdk) + CloudBase document database.
-- **Deployment target**: WeChat Cloud Base (微信云托管) with Express.js API planned (not yet created).
+- **Frontend**: Native WeChat miniprogram with TypeScript.
+- **Backend**: Express.js + cloud-managed MySQL 5.7 (`mysql2`).
+- **Deployment target**: WeChat Cloud Run, built automatically from GitHub using the root `Dockerfile`.
 
 ## Common Commands
 
@@ -38,9 +38,10 @@ tcb cloudrun deploy ...        # deploy containerized service
 ## Architecture Notes
 
 - Cloud functions run in a privileged context and receive `OPENID` via `cloud.getWXContext()` — never trust client-supplied openid values.
-- The `app.js` global `env` field is empty; fill in the CloudBase environment ID before the app can connect to cloud resources.
+- The API uses `wx.cloud.callContainer`; deployment identifiers are supplied by the existing runtime configuration/fallbacks.
 - The `cloudfunctions/quickstartFunctions/` directory holds template code; per `DEVELOPMENT_PLAN.md` it will be replaced with `notify-admin` and other domain-specific functions.
-- All business logic should eventually go through `wx.cloud.callContainer` (private link) to an Express.js API rather than direct `wx.cloud` database access, per the architecture decision in the development plan.
+- All business logic goes through `wx.cloud.callContainer` (private link) to the Express API.
+- The server reads `MYSQL_ADDRESS`, `MYSQL_USERNAME`, and `MYSQL_PASSWORD` only from Cloud Run. Never add database credentials to repository files.
 
 ## Security Notes
 

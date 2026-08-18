@@ -104,3 +104,21 @@
 - 账号/密码：仅存在于云托管控制台
 
 **后果：** `.gitignore` 必须覆盖所有 `.env*`、`.private.config.json`；本地只保留占位符值。
+
+---
+
+## M1-D008：云托管持久化使用内置 MySQL
+
+- 日期：2026-08-18
+- 状态：CONFIRMED
+
+**背景：** 实际微信云托管环境提供 MySQL 5.7，并自动向容器注入
+`MYSQL_ADDRESS`、`MYSQL_USERNAME`、`MYSQL_PASSWORD`。原实现使用未开通且无法由
+当前微信环境管理员签发 API Key 的 CloudBase 文档数据库，导致所有数据库请求返回 500。
+
+**决定：** Express 后端改用云托管内置 MySQL；启动时幂等创建 `manmanorder`
+数据库、业务表和 7 条初始菜品。凭据只从云托管环境变量读取，不写入代码、仓库或日志。
+
+**后果：** `server/src/db/cloudbase.js` 暂时保留文件名以减少路由改动，但内部实现为
+MySQL。文档数据库索引和 `CLOUDBASE_APIKEY` 方案不再适用于本项目；数据库与服务
+仅通过云托管私有网络通信，验证完成后关闭二者公网入口。

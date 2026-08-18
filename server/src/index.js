@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { errorHandler } = require('./middleware/errorHandler');
 const { requestId } = require('./middleware/requestId');
+const { ensureSchema } = require('./db/cloudbase');
 const routes = require('./routes');
 
 const app = express();
@@ -23,8 +24,24 @@ app.use('/api/v1', routes);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`蔓蔓点菜 API 运行中，端口 ${PORT}`);
-});
+
+async function start() {
+  await ensureSchema();
+  return app.listen(PORT, () => {
+    console.log(`蔓蔓点菜 API 运行中，端口 ${PORT}`);
+  });
+}
+
+if (require.main === module) {
+  start().catch((err) => {
+    console.error('[Startup] 数据库初始化失败', {
+      errName: err?.name,
+      errCode: err?.code,
+      errMessage: err?.message,
+    });
+    process.exit(1);
+  });
+}
 
 module.exports = app;
+module.exports.start = start;
