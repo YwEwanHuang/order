@@ -11,13 +11,9 @@ let db = null;
  */
 function getApp() {
   if (!app) {
-    console.log('[cloudbase] getApp: about to require @cloudbase/node-sdk');
-    const { init } = require('@cloudbase/node-sdk');
-    console.log('[cloudbase] getApp: init type =', typeof init, ', calling init({ env:', process.env.TCB_ENV_ID || process.env.ENV_ID || 'prod-d8gkzjj6ub74bba3b', '})');
-    app = init({
+    app = require('@cloudbase/node-sdk').init({
       env: process.env.TCB_ENV_ID || process.env.ENV_ID || 'prod-d8gkzjj6ub74bba3b',
     });
-    console.log('[cloudbase] getApp: app type =', typeof app, ', has database?', typeof app.database);
   }
   return app;
 }
@@ -27,11 +23,7 @@ function getApp() {
  */
 function getDb() {
   if (!db) {
-    console.log('[cloudbase] getDb: calling getApp().database()');
-    const appInstance = getApp();
-    console.log('[cloudbase] getDb: appInstance.database type =', typeof appInstance.database);
-    db = appInstance.database();
-    console.log('[cloudbase] getDb: db type =', typeof db, ', has collection?', typeof db.collection);
+    db = getApp().database();
   }
   return db;
 }
@@ -40,29 +32,25 @@ function getDb() {
 // dishes
 // ---------------------------------------------------------------------------
 
-/** 查询启用的菜品列表（可按分类） */
+/**
+ * 查询启用的菜品列表（可按分类）
+ * 注意：CloudBase 的 where() 每次调用会替换之前的条件，需合并为单次调用
+ */
 async function getActiveDishes({ category } = {}) {
-  try {
-    const db = getDb();
-    console.log('[cloudbase] getDb OK, calling collection...');
-    const collection = db.collection('dishes');
-    console.log('[cloudbase] collection OK, calling where...');
-    let query = collection.where({ isActive: true });
-    if (category) query = query.where({ category });
-    console.log('[cloudbase] where OK, calling orderBy + get...');
-    const { data } = await query
-      .orderBy('sortOrder', 'asc')
-      .orderBy('name', 'asc')
-      .get();
-    console.log('[cloudbase] query OK, got', data.length, 'dishes');
-    return data.map(normalizeDish);
-  } catch (err) {
-    console.error('[cloudbase] getActiveDishes FAILED:', err.code, err.message);
-    throw err;
-  }
+  const filter = { isActive: true };
+  if (category) filter.category = category;
+
+  const { data } = await getDb().collection('dishes')
+    .where(filter)
+    .orderBy('sortOrder', 'asc')
+    .orderBy('name', 'asc')
+    .get();
+  return data.map(normalizeDish);
 }
 
-/** 查询所有菜品（含停用，管理员用） */
+/**
+ * 查询所有菜品（含停用，管理员用）
+ */
 async function getAllDishes() {
   const { data } = await getDb().collection('dishes')
     .orderBy('sortOrder', 'asc')
@@ -105,7 +93,7 @@ async function updateDish(id, fields) {
 // meal_plans
 // ---------------------------------------------------------------------------
 
-/** 生成点菜记录的业务 ID（sha256 方式，但改用简单 hash 避免额外依赖） */
+/** 生成点菜记录的业务 ID（简单 hash，避免额外依赖） */
 function generateMealPlanId(openid, date, mealType) {
   const str = `${openid}:${date}:${mealType}`;
   let hash = 0;
@@ -116,14 +104,25 @@ function generateMealPlanId(openid, date, mealType) {
   return 'mp_' + Math.abs(hash).toString(36);
 }
 
-/** 查询用户的点菜记录（按日期范围） */
+/**
+ * 查询用户的点菜记录（按日期范围）
+ * 注意：CloudBase 的 where() 每次调用会替换之前的条件，需合并为单次调用
+ */
 async function getMealPlansByUser(openid, { from, to } = {}) {
-  const collection = getDb().collection('meal_plans');
-  let query = collection.where({ ownerOpenid: openid });
-  if (from) query = query.where({ date: getDb().command.gte(from) });
-  if (to) query = query.where({ date: getDb().command.lte(to) });
+  const filter = { ownerOpenid: openid };
+  const dbCmd = getDb().command;
+  if (from) filter.date = dbCmd.gte(from);
+  if (to) {
+    if (filter.date) {
+      // 如果已有 from 条件，需要用 and 合并
+      filter.date = dbCmd.and(filter.date, dbCmd.lte(to));
+    } else {
+      filter.date = dbCmd.lte(to);
+    }
+  }
 
-  const { data } = await query
+  const { data } = await getDb().collection('meal_plans')
+    .where(filter)
     .orderBy('date', 'desc')
     .orderBy('createdAt', 'desc')
     .get();
@@ -141,7 +140,6 @@ async function upsertMealPlan(openid, date, mealType, items, note, version) {
   const id = generateMealPlanId(openid, date, mealType);
   const now = Date.now();
 
-  // 先尝试按 doc(id) 更新（版本匹配）
   const existing = await getMealPlanById(id);
 
   if (existing) {
@@ -152,7 +150,6 @@ async function upsertMealPlan(openid, date, mealType, items, note, version) {
       err.code = 'VERSION_CONFLICT';
       throw err;
     }
-    // 更新
     const newVersion = existing.version + 1;
     const { stats } = await getDb().collection('meal_plans').doc(id).update({
       items,
@@ -196,7 +193,7 @@ async function createNotificationJob(mealPlanId, mealPlanVersion, channel, recip
     mealPlanId,
     mealPlanVersion,
     recipientOpenid,
-    channel, // 'in_app' | 'wechat_subscribe'
+    channel,
     status: 'pending',
     attemptCount: 0,
     lastErrorCode: null,
@@ -245,7 +242,7 @@ async function upsertSubscription(openid, templateId, remainingQuota) {
     await getDb().collection('notification_subscriptions').doc(existing._id).update({
       templateId,
       remainingQuota,
-      consumedAt: null, // 重置消费时间
+      consumedAt: null,
     });
   } else {
     await getDb().collection('notification_subscriptions').add({
