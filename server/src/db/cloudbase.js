@@ -81,6 +81,14 @@ async function safeCreate(db, sql) {
 
 async function migrateColumn(pool, table, column, definition) {
   try {
+    await db.query(sql);
+  } catch (err) {
+    console.warn('[ensureSchema] table create warning (non-fatal)', err.code);
+  }
+}
+
+async function migrateColumn(pool, table, column, definition) {
+  try {
     await pool.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
   } catch (err) {
     // ER_DUP_FIELDNAME = 列已存在，其他错误则抛出
@@ -167,6 +175,12 @@ async function ensureSchema() {
 
   // 迁移：补齐旧表可能缺失的列（幂等安全；错误仅记录不阻断启动）
   try {
+    await migrateColumn(db, 'manmanorder.dishes', 'description',
+      'VARCHAR(100) NULL DEFAULT \'\' AFTER category');
+    await migrateColumn(db, 'manmanorder.dishes', 'image_url',
+      'TEXT NULL DEFAULT NULL AFTER description');
+    await migrateColumn(db, 'manmanorder.dishes', 'created_by',
+      'VARCHAR(128) NULL DEFAULT \'\' AFTER sort_order');
     await migrateColumn(db, 'manmanorder.notification_jobs', 'channel',
       'VARCHAR(32) NOT NULL DEFAULT \'wechat_subscribe\' AFTER recipient_openid');
     await migrateColumn(db, 'manmanorder.notification_jobs', 'meal_plan_version',
