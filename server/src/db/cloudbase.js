@@ -71,6 +71,14 @@ function getPool() {
 }
 
 /** 对已存在的表添加可能缺失的列，幂等安全 */
+async function safeCreate(db, sql) {
+  try {
+    await db.query(sql);
+  } catch (err) {
+    console.warn('[ensureSchema] table create warning (non-fatal)', err.code);
+  }
+}
+
 async function migrateColumn(pool, table, column, definition) {
   try {
     await pool.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
@@ -87,13 +95,12 @@ async function ensureSchema() {
       `CREATE DATABASE IF NOT EXISTS \`${DATABASE_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
     );
   } catch (err) {
-    // If we lack CREATE DATABASE permission the database already exists — that's fine for managed MySQL
     if (err.code !== 'ER_DB_CREATE_EXISTS' && err.code !== 'ER_ACCESS_DENIED_ERROR') {
-      console.error('[ensureSchema] database setup warning', { errName: err?.name, errCode: err?.code });
+      console.warn('[ensureSchema] database create warning (non-fatal)', err.code);
     }
   }
 
-  await db.query(`
+  await safeCreate(db, `
     CREATE TABLE IF NOT EXISTS ${TABLE.dishes} (
       id VARCHAR(64) NOT NULL,
       name VARCHAR(30) NOT NULL,
@@ -111,7 +118,7 @@ async function ensureSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
-  await db.query(`
+  await safeCreate(db, `
     CREATE TABLE IF NOT EXISTS ${TABLE.mealPlans} (
       id VARCHAR(64) NOT NULL,
       owner_openid VARCHAR(128) NOT NULL,
@@ -127,7 +134,7 @@ async function ensureSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
-  await db.query(`
+  await safeCreate(db, `
     CREATE TABLE IF NOT EXISTS ${TABLE.notificationJobs} (
       id VARCHAR(64) NOT NULL,
       meal_plan_id VARCHAR(64) NOT NULL,
@@ -147,7 +154,7 @@ async function ensureSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
-  await db.query(`
+  await safeCreate(db, `
     CREATE TABLE IF NOT EXISTS ${TABLE.subscriptions} (
       recipient_openid VARCHAR(128) NOT NULL,
       template_id VARCHAR(128) NOT NULL,
@@ -158,31 +165,40 @@ async function ensureSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
-  // 迁移：补齐旧表可能缺失的列（幂等安全）
-  await migrateColumn(db, 'manmanorder.notification_jobs', 'channel',
-    'VARCHAR(32) NOT NULL DEFAULT "wechat_subscribe" AFTER recipient_openid');
-  await migrateColumn(db, 'manmanorder.notification_jobs', 'meal_plan_version',
-    'INT NOT NULL DEFAULT 1 AFTER meal_plan_id');
-  await migrateColumn(db, 'manmanorder.meal_plans', 'items',
-    'JSON NOT NULL DEFAULT (\'[]\') AFTER meal_type');
-  await migrateColumn(db, 'manmanorder.meal_plans', 'note',
-    'VARCHAR(100) NOT NULL DEFAULT \'\' AFTER items');
-  await migrateColumn(db, 'manmanorder.meal_plans', 'version',
-    'INT NOT NULL DEFAULT 1 AFTER note');
-  await migrateColumn(db, 'manmanorder.notification_jobs', 'last_error_code',
-    'VARCHAR(64) NULL AFTER attempt_count');
-  await migrateColumn(db, 'manmanorder.notification_jobs', 'sent_at',
-    'BIGINT NULL AFTER last_error_code');
+  // 迁移：补齐旧表可能缺失的列（幂等安全；错误仅记录不阻断启动）
+  try {
+    await migrateColumn(db, 'manmanorder.notification_jobs', 'channel',
+      'VARCHAR(32) NOT NULL DEFAULT \'wechat_subscribe\' AFTER recipient_openid');
+    await migrateColumn(db, 'manmanorder.notification_jobs', 'meal_plan_version',
+      'INT NOT NULL DEFAULT 1 AFTER meal_plan_id');
+    await migrateColumn(db, 'manmanorder.meal_plans', 'items',
+      'JSON NOT NULL AFTER meal_type');
+    await migrateColumn(db, 'manmanorder.meal_plans', 'note',
+      'VARCHAR(100) NOT NULL DEFAULT \'\' AFTER items');
+    await migrateColumn(db, 'manmanorder.meal_plans', 'version',
+      'INT NOT NULL DEFAULT 1 AFTER note');
+    await migrateColumn(db, 'manmanorder.notification_jobs', 'last_error_code',
+      'VARCHAR(64) NULL AFTER attempt_count');
+    await migrateColumn(db, 'manmanorder.notification_jobs', 'sent_at',
+      'BIGINT NULL AFTER last_error_code');
+  } catch (err) {
+    // 迁移失败不阻断启动，记录错误便于排查
+    console.error('[ensureSchema] migration warning (non-fatal)', { errName: err.name, errCode: err.code });
+  }
 
   const now = Date.now();
-  for (const [id, name, category, sortOrder] of INITIAL_DISHES) {
-    await db.execute(
-      `INSERT INTO ${TABLE.dishes}
-        (id, name, category, description, image_url, is_active, sort_order, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, '', '', 1, ?, '', ?, ?)
-       ON DUPLICATE KEY UPDATE id = VALUES(id)`,
-      [id, name, category, sortOrder, now, now]
-    );
+  try {
+    for (const [id, name, category, sortOrder] of INITIAL_DISHES) {
+      await db.execute(
+        `INSERT INTO ${TABLE.dishes}
+          (id, name, category, description, image_url, is_active, sort_order, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, '', '', 1, ?, '', ?, ?)
+         ON DUPLICATE KEY UPDATE id = VALUES(id)`,
+        [id, name, category, sortOrder, now, now]
+      );
+    }
+  } catch (err) {
+    console.warn('[ensureSchema] seed dishes warning (non-fatal)', err.code);
   }
 }
 
