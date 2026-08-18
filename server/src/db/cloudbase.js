@@ -70,6 +70,16 @@ function getPool() {
   return pool;
 }
 
+/** 对已存在的表添加可能缺失的列，幂等安全 */
+async function migrateColumn(pool, table, column, definition) {
+  try {
+    await pool.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
+  } catch (err) {
+    // ER_DUP_FIELDNAME = 列已存在，其他错误则抛出
+    if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  }
+}
+
 async function ensureSchema() {
   const db = getPool();
   try {
@@ -147,6 +157,22 @@ async function ensureSchema() {
       PRIMARY KEY (recipient_openid)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // 迁移：补齐旧表可能缺失的列（幂等安全）
+  await migrateColumn(db, 'manmanorder.notification_jobs', 'channel',
+    'VARCHAR(32) NOT NULL DEFAULT "wechat_subscribe" AFTER recipient_openid');
+  await migrateColumn(db, 'manmanorder.notification_jobs', 'meal_plan_version',
+    'INT NOT NULL DEFAULT 1 AFTER meal_plan_id');
+  await migrateColumn(db, 'manmanorder.meal_plans', 'items',
+    'JSON NOT NULL DEFAULT (\'[]\') AFTER meal_type');
+  await migrateColumn(db, 'manmanorder.meal_plans', 'note',
+    'VARCHAR(100) NOT NULL DEFAULT \'\' AFTER items');
+  await migrateColumn(db, 'manmanorder.meal_plans', 'version',
+    'INT NOT NULL DEFAULT 1 AFTER note');
+  await migrateColumn(db, 'manmanorder.notification_jobs', 'last_error_code',
+    'VARCHAR(64) NULL AFTER attempt_count');
+  await migrateColumn(db, 'manmanorder.notification_jobs', 'sent_at',
+    'BIGINT NULL AFTER last_error_code');
 
   const now = Date.now();
   for (const [id, name, category, sortOrder] of INITIAL_DISHES) {
