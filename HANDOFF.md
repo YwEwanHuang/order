@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-08-17 18:41 - 项目状态审查 + 测试计划制定（Claude Code）
+
+- 状态：DONE（审查完成，计划已制定）
+- 目标：审查项目状态、制定测试用例、开发计划，使用 goal 模式继续开发
+- 改动文件：
+  - 新增 `TEST_PLAN.md` — 完整测试计划（M2–M5），含单元/API/边界测试用例
+  - 新增 `WORKFLOW-DEV.md` — 开发流水线配置文件（备用）
+  - 修正 `TASKS.md` 汇总表（原来显示"0 完成"已纠正为"5 完成"）
+  - `HANDOFF.md` — 追加本条记录
+- 验证命令与结果：
+  - `git status --short` → `M WeChatDeloy/project.private.config.json`（未提交私钥配置）
+  - 确认 domain/date.test.ts 和 selection.test.ts 已存在（质量良好）
+  - 确认 server/package.json 缺少 jest/supertest（test infra agent 正在处理）
+- 未解决风险：
+  - T-003 仍阻塞 M4（订阅消息真机验证需用户在微信公众平台操作）
+  - server 端测试框架尚未建立（agent server-test-setup 正在处理）
+  - 前端页面与后端 API 对接未验证（需部署后联调）
+  - cloudTipModal 组件仍是旧模板 JS（HANDOFF 遗留）
+  - tabBar 图标文件路径待验证
+- 下一步：
+  1. 等待 server-test-setup agent 完成 jest 配置
+  2. 等待 server-unit-tests 和 miniprogram-unit-tests agents 完成
+  3. 运行 `cd WeChatDeloy/miniprogram && npm run verify` 验证前端编译
+  4. 推进 M2（身份 + 菜品 API + 小程序 UI 对接）
+  5. 推进 T-003 订阅消息真机验证（需用户操作）
+- Git：main / 60c6fd0 / dirty（project.private.config.json 未提交）
+
+---
+
 ## 2026-08-17 10:16 - T-011 TypeScript 小程序骨架
 
 - 状态：DONE

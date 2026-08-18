@@ -18,7 +18,9 @@ function resolveUser(req) {
   const openid = req.headers['x-wx-openid'];
   if (!openid) return null;
 
-  const adminOpenids = getAdminOpenids();
+  // Read admin list at call time (not module-load time) so env changes in tests are reflected
+  const env = process.env.ADMIN_OPENIDS || '';
+  const adminOpenids = env.split(',').map(s => s.trim()).filter(Boolean);
   return {
     openid,
     role: adminOpenids.includes(openid) ? 'admin' : 'user',

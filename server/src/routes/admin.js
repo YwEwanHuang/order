@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+
+// 所有管理接口先要求已登录，再要求是管理员
+router.use(requireAuth);
+router.use(requireAdmin);
 const {
   getAllDishes,
   getDishById,
