@@ -45,10 +45,10 @@ async function enqueueNotifications(planId, planVersion) {
 
 /**
  * 消费一条订阅额度并入队微信订阅消息通知；无额度时跳过
- * 微信订阅消息功能目前 PENDING，等待通知消费者完成迁移
+ * 依赖 notify-admin 云函数扫描 pending 任务并调用微信 API 发送
  */
 async function consumeAndEnqueueSubscribe(planId, planVersion, adminOpenid) {
-  // Feature flag: require explicit opt-in before creating wechat_subscribe jobs
+  // Feature flag: set SUBSCRIBE_ENABLED=true in Cloud Run env to enable wechat_subscribe job creation
   if (process.env.SUBSCRIBE_ENABLED !== 'true') return;
 
   try {

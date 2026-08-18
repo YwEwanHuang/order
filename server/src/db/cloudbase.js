@@ -92,6 +92,7 @@ async function ensureSchema() {
       image_url TEXT NOT NULL,
       is_active TINYINT(1) NOT NULL DEFAULT 1,
       sort_order INT NOT NULL DEFAULT 0,
+      created_by VARCHAR(128) NOT NULL DEFAULT '',
       created_at BIGINT NOT NULL,
       updated_at BIGINT NOT NULL,
       PRIMARY KEY (id),
@@ -151,8 +152,8 @@ async function ensureSchema() {
   for (const [id, name, category, sortOrder] of INITIAL_DISHES) {
     await db.execute(
       `INSERT INTO ${TABLE.dishes}
-        (id, name, category, description, image_url, is_active, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, '', '', 1, ?, ?, ?)
+        (id, name, category, description, image_url, is_active, sort_order, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, '', '', 1, ?, '', ?, ?)
        ON DUPLICATE KEY UPDATE id = VALUES(id)`,
       [id, name, category, sortOrder, now, now]
     );
@@ -171,7 +172,7 @@ async function getActiveDishes({ category } = {}) {
     params.push(category);
   }
   const [rows] = await getPool().execute(
-    `SELECT id, name, category, description, image_url, is_active, sort_order
+    `SELECT id, name, category, description, image_url, is_active, sort_order, created_by
      FROM ${TABLE.dishes}
      ${where}
      ORDER BY sort_order ASC, name ASC`,
@@ -182,7 +183,7 @@ async function getActiveDishes({ category } = {}) {
 
 async function getAllDishes() {
   const [rows] = await getPool().execute(
-    `SELECT id, name, category, description, image_url, is_active, sort_order
+    `SELECT id, name, category, description, image_url, is_active, sort_order, created_by
      FROM ${TABLE.dishes}
      ORDER BY sort_order ASC, name ASC`,
     []
@@ -192,7 +193,7 @@ async function getAllDishes() {
 
 async function getDishById(id) {
   const [rows] = await getPool().execute(
-    `SELECT id, name, category, description, image_url, is_active, sort_order
+    `SELECT id, name, category, description, image_url, is_active, sort_order, created_by
      FROM ${TABLE.dishes} WHERE id = ? LIMIT 1`,
     [id]
   );
@@ -210,11 +211,12 @@ async function createDish(fields) {
     imageUrl: fields.imageUrl || '',
     isActive: fields.isActive !== undefined ? Boolean(fields.isActive) : true,
     sortOrder: Number(fields.sortOrder) || 0,
+    createdBy: fields.createdBy || '',
   };
   await getPool().execute(
     `INSERT INTO ${TABLE.dishes}
-      (id, name, category, description, image_url, is_active, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, name, category, description, image_url, is_active, sort_order, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       record.id,
       record.name,
@@ -223,6 +225,7 @@ async function createDish(fields) {
       record.imageUrl,
       record.isActive ? 1 : 0,
       record.sortOrder,
+      record.createdBy,
       now,
       now,
     ]
@@ -255,6 +258,13 @@ async function updateDish(id, fields) {
     );
   }
   return getDishById(id);
+}
+
+async function deleteDish(id) {
+  await getPool().execute(
+    `UPDATE ${TABLE.dishes} SET is_active = 0, updated_at = ? WHERE id = ?`,
+    [Date.now(), id]
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -455,6 +465,7 @@ function normalizeDish(row) {
     imageUrl: row.image_url || '',
     isActive: Boolean(row.is_active),
     sortOrder: Number(row.sort_order) || 0,
+    createdBy: row.created_by || '',
   };
 }
 
@@ -512,6 +523,7 @@ module.exports = {
   getDishById,
   createDish,
   updateDish,
+  deleteDish,
   getMealPlansByUser,
   getMealPlanById,
   upsertMealPlan,

@@ -51,3 +51,10 @@ coverage/
 
 # Git internals
 HANDOFF.md
+
+# Agent working directory
+.codex/
+
+# Word documents (review/feedback only)
+*.docx
+*.doc

@@ -10,32 +10,48 @@
  *  2. 服务端 console.error 输出包含 errName / errCode / requestId（可观测性）；
  *  3. 响应不含 openid / 请求体 / Authorization 等敏感字段。
  */
+
+// Set env BEFORE the mock so getPool() in the real cloudbase.js doesn't fail closed
+process.env.MYSQL_ADDRESS = '127.0.0.1:3306';
+process.env.MYSQL_USERNAME = 'root';
+process.env.MYSQL_PASSWORD = 'password';
+
+// Top-level jest.mock for mysql2/promise is REQUIRED — getPool() is called at
+// cloudbase.js module initialization time, before any beforeEach runs.
+// Only a hoisted (top-level) jest.mock will be registered before that moment.
+const mockPool = { query: jest.fn(), execute: jest.fn(), getConnection: jest.fn() };
+jest.mock('mysql2/promise', () => ({
+  createPool: jest.fn(() => mockPool),
+}), { virtual: true });
+
+// cloudbase mock — getActiveDishes throws the expected MySQL auth error shape.
+// This mock IS hoisted to top-level (jest.mock at file top), which is what we need
+// so it's registered before cloudbase.js module initialization.
+const mockRealShapeErr = new Error('Access denied for database user');
+mockRealShapeErr.name = 'Error';
+mockRealShapeErr.code = 'ER_ACCESS_DENIED_ERROR';
+jest.mock('../db/cloudbase', () => ({
+  getActiveDishes: jest.fn(async () => { throw mockRealShapeErr; }),
+  getAllDishes: jest.fn(),
+  getDishById: jest.fn(),
+  createDish: jest.fn(),
+  updateDish: jest.fn(),
+  deleteDish: jest.fn(),
+  getMealPlansByUser: jest.fn(),
+  getMealPlanById: jest.fn(),
+  upsertMealPlan: jest.fn(),
+  generateMealPlanId: jest.fn(),
+  createNotificationJob: jest.fn(),
+  getNotificationJobs: jest.fn(),
+  updateNotificationStatus: jest.fn(),
+  getSubscription: jest.fn(),
+  upsertSubscription: jest.fn(),
+  consumeQuota: jest.fn(),
+  getPool: jest.fn(() => mockPool),
+}), { virtual: true });
+
 const request = require('supertest');
 const express = require('express');
-
-// 关键：只 mock cloudbase 模块的 getActiveDishes，保留真实 errorHandler + auth
-jest.mock('../db/cloudbase', () => {
-  const realShapeErr = new Error('Access denied for database user');
-  realShapeErr.name = 'Error';
-  realShapeErr.code = 'ER_ACCESS_DENIED_ERROR';
-  return {
-    getActiveDishes: jest.fn(async () => { throw realShapeErr; }),
-    getAllDishes: jest.fn(),
-    getDishById: jest.fn(),
-    createDish: jest.fn(),
-    updateDish: jest.fn(),
-    getMealPlansByUser: jest.fn(),
-    getMealPlanById: jest.fn(),
-    upsertMealPlan: jest.fn(),
-    generateMealPlanId: jest.fn(),
-    createNotificationJob: jest.fn(),
-    getNotificationJobs: jest.fn(),
-    updateNotificationStatus: jest.fn(),
-    getSubscription: jest.fn(),
-    upsertSubscription: jest.fn(),
-    consumeQuota: jest.fn(),
-  };
-});
 
 const { requestId } = require('../middleware/requestId');
 const { errorHandler } = require('../middleware/errorHandler');

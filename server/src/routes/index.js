@@ -18,6 +18,12 @@ router.use('/dishes', require('./dishes'));
 // /meal-plans
 router.use('/meal-plans', require('./mealPlans'));
 
+// /quota
+router.use('/quota', require('./quota'));
+
+// /notifications
+router.use('/notifications', require('./notifications'));
+
 // /admin/*
 router.use('/admin', require('./admin'));
 

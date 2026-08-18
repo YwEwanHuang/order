@@ -20,6 +20,9 @@ app.get('/health', (req, res) => {
 // API 路由
 app.use('/api/v1', routes);
 
+// 内部接口（供 notify-admin 云函数调用）
+app.use('/internal/notify', require('./routes/internal'));
+
 // 统一错误处理
 app.use(errorHandler);
 

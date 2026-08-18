@@ -11,6 +11,7 @@ import type {
   MealPlanSubmit,
   CurrentUser,
   Notification,
+  QuotaInfo,
 } from '../domain/types';
 
 // ---------------------------------------------------------------------------
@@ -198,6 +199,16 @@ export async function fetchAdminNotifications(): Promise<Notification[]> {
 /** 手动重试一条失败通知 */
 export async function retryNotification(id: string): Promise<Notification> {
   const data = await request<Notification>(`/api/v1/admin/notifications/${id}/retry`, 'POST');
+  return handleResponse(data);
+}
+
+// ---------------------------------------------------------------------------
+// 用户配额与订阅状态
+// ---------------------------------------------------------------------------
+
+/** 查询当前用户的订阅配额（需登录） */
+export async function fetchQuota(): Promise<QuotaInfo> {
+  const data = await request<QuotaInfo>('/api/v1/quota', 'GET');
   return handleResponse(data);
 }
 

@@ -141,3 +141,13 @@ export interface Notification {
   createdAt: string;
   sentAt?: string | null;
 }
+
+/**
+ * 配额信息（GET /api/v1/quota 返回）
+ */
+export interface QuotaInfo {
+  hasSubscription: boolean;
+  remainingQuota: number;
+  templateId: string;
+  acceptedAt: string | null;
+}
