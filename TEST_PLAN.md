@@ -39,7 +39,7 @@ server/
 │   │   ├── mealPlans.test.js
 │   │   └── admin.test.js
 │   └── db/
-│       └── cloudbase.test.js  # mock @cloudbase/node-sdk
+│       └── cloudbase.test.js  # mock mysql2/promise
 └── jest.config.js
 ```
 
@@ -271,7 +271,7 @@ server/
 cd WeChatDeloy/miniprogram && npm test
 
 # 后端 API 测试
-cd server && npm test
+cd /Users/yiwei/Library/CloudStorage/OneDrive-个人/Project/ManmanOrder/server && npm test
 
 # 完整验证（包含 lint + 类型检查）
 cd WeChatDeloy/miniprogram && npm run verify

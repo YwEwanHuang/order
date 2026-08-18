@@ -112,7 +112,7 @@
 - 日期：2026-08-18
 - 状态：CONFIRMED
 
-**背景：** 实际微信云托管环境提供 MySQL 5.7，并自动向容器注入
+**背景：** 实际微信云托管环境提供 MySQL 5.7，并通过云托管环境变量注入
 `MYSQL_ADDRESS`、`MYSQL_USERNAME`、`MYSQL_PASSWORD`。原实现使用未开通且无法由
 当前微信环境管理员签发 API Key 的 CloudBase 文档数据库，导致所有数据库请求返回 500。
 
@@ -122,3 +122,5 @@
 **后果：** `server/src/db/cloudbase.js` 暂时保留文件名以减少路由改动，但内部实现为
 MySQL。文档数据库索引和 `CLOUDBASE_APIKEY` 方案不再适用于本项目；数据库与服务
 仅通过云托管私有网络通信，验证完成后关闭二者公网入口。
+
+> **注意**：通知消费者 `cloudfunctions/notify-admin` 仍使用 CloudBase 文档数据库，尚未迁移到 MySQL。`wechat_subscribe` 通道目前默认关闭（`SUBSCRIBE_ENABLED=false`），直到云函数完成迁移。

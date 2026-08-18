@@ -23,7 +23,7 @@ app.use('/api/v1', routes);
 // 统一错误处理
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 80;
 
 async function start() {
   await ensureSchema();
@@ -37,10 +37,19 @@ if (require.main === module) {
     console.error('[Startup] 数据库初始化失败', {
       errName: err?.name,
       errCode: err?.code,
-      errMessage: err?.message,
+      // Only log missing env var NAMES, never their values
+      missingVars: collectMissingVars(),
     });
     process.exit(1);
   });
+}
+
+function collectMissingVars() {
+  const missing = [];
+  if (!process.env.MYSQL_ADDRESS) missing.push('MYSQL_ADDRESS');
+  if (!process.env.MYSQL_USERNAME) missing.push('MYSQL_USERNAME');
+  if (!process.env.MYSQL_PASSWORD) missing.push('MYSQL_PASSWORD');
+  return missing;
 }
 
 module.exports = app;

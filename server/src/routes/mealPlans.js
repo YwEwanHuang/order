@@ -1,3 +1,14 @@
+/**
+ * Strip internal ownership field from meal plan DTOs sent to clients.
+ * ownerOpenid is kept in the database for server-side authorization only.
+ */
+function toPublicDto(plan) {
+  if (!plan) return plan;
+  // eslint-disable-next-line no-unused-vars
+  const { ownerOpenid, ...pub } = plan;
+  return pub;
+}
+
 const express = require('express');
 const router = express.Router();
 const { requireAuth, getAdminOpenids } = require('../middleware/auth');
@@ -6,6 +17,7 @@ const {
   upsertMealPlan,
   getMealPlanById,
   createNotificationJob,
+  updateNotificationStatus,
   getSubscription,
 } = require('../db/cloudbase');
 
@@ -14,32 +26,43 @@ const {
  * - in_app 兜底通知：所有管理员都能看到
  * - wechat_subscribe：仅当该管理员有订阅额度时创建（consumeQuota 原子扣减）
  */
-function enqueueNotifications(planId, planVersion) {
+async function enqueueNotifications(planId, planVersion) {
   const adminOpenids = getAdminOpenids();
+  const jobs = [];
   if (adminOpenids.length === 0) {
     // 未配置管理员时，落到提交者本人；不影响主流程
-    createNotificationJob(planId, planVersion, 'in_app', 'unknown-admin')
-      .catch(console.error);
-    return;
+    jobs.push(createNotificationJob(planId, planVersion, 'in_app', 'unknown-admin')
+      .catch(console.error));
+  } else {
+    for (const adminOpenid of adminOpenids) {
+      jobs.push(createNotificationJob(planId, planVersion, 'in_app', adminOpenid)
+        .catch(console.error));
+      jobs.push(consumeAndEnqueueSubscribe(planId, planVersion, adminOpenid));
+    }
   }
-  for (const adminOpenid of adminOpenids) {
-    createNotificationJob(planId, planVersion, 'in_app', adminOpenid)
-      .catch(console.error);
-    consumeAndEnqueueSubscribe(planId, planVersion, adminOpenid);
-  }
+  await Promise.all(jobs);
 }
 
 /**
  * 消费一条订阅额度并入队微信订阅消息通知；无额度时跳过
+ * 微信订阅消息功能目前 PENDING，等待通知消费者完成迁移
  */
 async function consumeAndEnqueueSubscribe(planId, planVersion, adminOpenid) {
+  // Feature flag: require explicit opt-in before creating wechat_subscribe jobs
+  if (process.env.SUBSCRIBE_ENABLED !== 'true') return;
+
   try {
     const { consumeQuota } = require('../db/cloudbase');
+    // Create the job first to reserve the slot; only then consume quota
+    const jobId = await createNotificationJob(planId, planVersion, 'wechat_subscribe', adminOpenid);
     const consumed = await consumeQuota(adminOpenid);
-    if (!consumed) return;
-    await createNotificationJob(planId, planVersion, 'wechat_subscribe', adminOpenid);
+    if (!consumed) {
+      // No quota — mark the job we just created as no_quota so no one retries it expecting delivery
+      await updateNotificationStatus(jobId, 'no_quota', 'NO_QUOTA_ON_ENQUEUE');
+    }
   } catch (e) {
-    console.error('enqueue wechat_subscribe failed:', e);
+    // Log only at error level, no credential exposure
+    console.error('[notify] wechat_subscribe enqueue failed', { errName: e?.name, errCode: e?.code });
   }
 }
 
@@ -48,7 +71,7 @@ router.get('/', requireAuth, async (req, res, next) => {
   try {
     const { from, to } = req.query;
     const plans = await getMealPlansByUser(req.user.openid, { from, to });
-    res.json({ data: plans, requestId: req.requestId });
+    res.json({ data: plans.map(toPublicDto), requestId: req.requestId });
   } catch (err) {
     next(err);
   }
@@ -84,9 +107,9 @@ router.post('/', requireAuth, async (req, res, next) => {
     );
 
     // 异步入队通知（不阻塞响应）
-    enqueueNotifications(plan.id, plan.version);
+    enqueueNotifications(plan.id, plan.version).catch(console.error);
 
-    res.status(201).json({ data: plan, requestId: req.requestId });
+    res.status(201).json({ data: toPublicDto(plan), requestId: req.requestId });
   } catch (err) {
     next(err);
   }
@@ -129,9 +152,9 @@ router.put('/:id', requireAuth, async (req, res, next) => {
       version
     );
 
-    enqueueNotifications(plan.id, plan.version);
+    enqueueNotifications(plan.id, plan.version).catch(console.error);
 
-    res.json({ data: plan, requestId: req.requestId });
+    res.json({ data: toPublicDto(plan), requestId: req.requestId });
   } catch (err) {
     next(err);
   }

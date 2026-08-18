@@ -40,12 +40,25 @@ function parseMysqlAddress(address = '127.0.0.1:3306') {
 
 function getPool() {
   if (!pool) {
-    const { host, port } = parseMysqlAddress(process.env.MYSQL_ADDRESS);
+    const addr = process.env.MYSQL_ADDRESS;
+    if (!addr) {
+      const err = new Error('MYSQL_ADDRESS is required');
+      err.code = 'MISSING_ENV';
+      throw err;
+    }
+    const user = process.env.MYSQL_USERNAME;
+    const password = process.env.MYSQL_PASSWORD;
+    if (!user || !password) {
+      const err = new Error('MYSQL_USERNAME and MYSQL_PASSWORD are required');
+      err.code = 'MISSING_ENV';
+      throw err;
+    }
+    const { host, port } = parseMysqlAddress(addr);
     pool = mysql.createPool({
       host,
       port,
-      user: process.env.MYSQL_USERNAME,
-      password: process.env.MYSQL_PASSWORD,
+      user,
+      password,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
@@ -59,9 +72,16 @@ function getPool() {
 
 async function ensureSchema() {
   const db = getPool();
-  await db.query(
-    `CREATE DATABASE IF NOT EXISTS \`${DATABASE_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
-  );
+  try {
+    await db.query(
+      `CREATE DATABASE IF NOT EXISTS \`${DATABASE_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+    );
+  } catch (err) {
+    // If we lack CREATE DATABASE permission the database already exists — that's fine for managed MySQL
+    if (err.code !== 'ER_DB_CREATE_EXISTS' && err.code !== 'ER_ACCESS_DENIED_ERROR') {
+      console.error('[ensureSchema] database setup warning', { errName: err?.name, errCode: err?.code });
+    }
+  }
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS ${TABLE.dishes} (
@@ -502,4 +522,6 @@ module.exports = {
   getSubscription,
   upsertSubscription,
   consumeQuota,
+  // Exported for unit testing only
+  getPool,
 };

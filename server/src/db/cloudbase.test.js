@@ -2,6 +2,11 @@
  * @jest/unit MySQL data layer.
  */
 
+// Set required env vars before any modules load so mock pool is used
+process.env.MYSQL_ADDRESS = '127.0.0.1:3306';
+process.env.MYSQL_USERNAME = 'root';
+process.env.MYSQL_PASSWORD = 'password';
+
 const mockPool = {
   query: jest.fn(),
   execute: jest.fn(),
@@ -20,7 +25,7 @@ jest.mock('mysql2/promise', () => ({
   createPool: jest.fn(() => mockPool),
 }), { virtual: true });
 
-const database = require('../db/cloudbase');
+let database;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -31,6 +36,10 @@ beforeEach(() => {
   mockConnection.execute.mockResolvedValue([[], []]);
   mockConnection.commit.mockResolvedValue();
   mockConnection.rollback.mockResolvedValue();
+  // Re-load inside isolate so cloudbase.js is never in the shared module cache
+  jest.isolateModules(() => {
+    database = require('../db/cloudbase');
+  });
 });
 
 describe('MySQL data layer', () => {
@@ -209,6 +218,161 @@ describe('MySQL data layer', () => {
     expect(mockPool.execute).toHaveBeenCalledWith(
       expect.stringContaining('remaining_quota = remaining_quota - 1'),
       [expect.any(Number), 'admin-1']
+    );
+  });
+});
+
+describe('getPool() fail-closed', () => {
+  const origAddr = process.env.MYSQL_ADDRESS;
+  const origUser = process.env.MYSQL_USERNAME;
+  const origPass = process.env.MYSQL_PASSWORD;
+
+  // We need to test that getPool() throws without env vars.
+  // To do this without jest.resetModules() (which would break other tests' hoisted mocks),
+  // we use jest.isolateModules() to create an isolated module scope.
+  it('throws with code MISSING_ENV when MYSQL_ADDRESS is missing', async () => {
+    let threw = false;
+    let thrownErr = null;
+
+    await jest.isolateModules(async () => {
+      // Override the env vars for this isolated scope
+      const originalAddr = process.env.MYSQL_ADDRESS;
+      const originalUser = process.env.MYSQL_USERNAME;
+      const originalPass = process.env.MYSQL_PASSWORD;
+      delete process.env.MYSQL_ADDRESS;
+      delete process.env.MYSQL_USERNAME;
+      delete process.env.MYSQL_PASSWORD;
+
+      jest.resetModules();
+
+      jest.doMock('mysql2/promise', () => ({
+        createPool: jest.fn(() => mockPool),
+      }), { virtual: true });
+
+      try {
+        const db = require('../db/cloudbase');
+        db.getPool();
+      } catch (e) {
+        threw = true;
+        thrownErr = e;
+      } finally {
+        // Restore env vars
+        process.env.MYSQL_ADDRESS = originalAddr;
+        process.env.MYSQL_USERNAME = originalUser;
+        process.env.MYSQL_PASSWORD = originalPass;
+      }
+    });
+
+    expect(threw).toBe(true);
+    expect(thrownErr).toMatchObject({ code: 'MISSING_ENV' });
+  });
+
+  it('throws with code MISSING_ENV when MYSQL_USERNAME is missing', async () => {
+    let threw = false;
+    let thrownErr = null;
+
+    await jest.isolateModules(async () => {
+      const originalAddr = process.env.MYSQL_ADDRESS;
+      const originalUser = process.env.MYSQL_USERNAME;
+      const originalPass = process.env.MYSQL_PASSWORD;
+      process.env.MYSQL_ADDRESS = '127.0.0.1:3306';
+      delete process.env.MYSQL_USERNAME;
+      delete process.env.MYSQL_PASSWORD;
+
+      jest.resetModules();
+
+      jest.doMock('mysql2/promise', () => ({
+        createPool: jest.fn(() => mockPool),
+      }), { virtual: true });
+
+      try {
+        const db = require('../db/cloudbase');
+        db.getPool();
+      } catch (e) {
+        threw = true;
+        thrownErr = e;
+      } finally {
+        process.env.MYSQL_ADDRESS = originalAddr;
+        process.env.MYSQL_USERNAME = originalUser;
+        process.env.MYSQL_PASSWORD = originalPass;
+      }
+    });
+
+    expect(threw).toBe(true);
+    expect(thrownErr).toMatchObject({ code: 'MISSING_ENV' });
+  });
+
+  it('throws with code MISSING_ENV when MYSQL_PASSWORD is missing', async () => {
+    let threw = false;
+    let thrownErr = null;
+
+    await jest.isolateModules(async () => {
+      const originalAddr = process.env.MYSQL_ADDRESS;
+      const originalUser = process.env.MYSQL_USERNAME;
+      const originalPass = process.env.MYSQL_PASSWORD;
+      process.env.MYSQL_ADDRESS = '127.0.0.1:3306';
+      process.env.MYSQL_USERNAME = 'root';
+      delete process.env.MYSQL_PASSWORD;
+
+      jest.resetModules();
+
+      jest.doMock('mysql2/promise', () => ({
+        createPool: jest.fn(() => mockPool),
+      }), { virtual: true });
+
+      try {
+        const db = require('../db/cloudbase');
+        db.getPool();
+      } catch (e) {
+        threw = true;
+        thrownErr = e;
+      } finally {
+        process.env.MYSQL_ADDRESS = originalAddr;
+        process.env.MYSQL_USERNAME = originalUser;
+        process.env.MYSQL_PASSWORD = originalPass;
+      }
+    });
+
+    expect(threw).toBe(true);
+    expect(thrownErr).toMatchObject({ code: 'MISSING_ENV' });
+  });
+});
+
+describe('ensureSchema() graceful CREATE DATABASE failure', () => {
+  it('CREATE DATABASE failure does not crash the process (logged gracefully)', async () => {
+    const consoleSpy = jest.spyOn(console, 'error').mockReturnValue();
+    // Simulate CREATE DATABASE failing with a non-ER_DB_CREATE_EXISTS / non-ER_ACCESS_DENIED error
+    mockPool.query.mockRejectedValueOnce(new Error('Some other DB error'));
+
+    // Should not throw
+    await expect(database.ensureSchema()).resolves.not.toThrow();
+    // Error should be logged
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[ensureSchema] database setup warning',
+      expect.objectContaining({ errName: 'Error' })
+    );
+    consoleSpy.mockRestore();
+  });
+});
+
+describe('notification job helpers', () => {
+  it('createNotificationJob returns a job id string', async () => {
+    mockPool.execute.mockResolvedValueOnce([{ affectedRows: 1 }, []]);
+
+    const jobId = await database.createNotificationJob('mp-1', 1, 'in_app', 'admin-1');
+
+    expect(typeof jobId).toBe('string');
+    expect(jobId).toMatch(/^job-/);
+  });
+
+  it('updateNotificationStatus correctly updates status and optionally error code', async () => {
+    mockPool.execute.mockResolvedValueOnce([{ affectedRows: 1 }, []]);
+
+    await database.updateNotificationStatus('job-1', 'no_quota', 'NO_QUOTA_ON_ENQUEUE');
+
+    expect(mockPool.execute).toHaveBeenCalledWith(
+      expect.stringContaining('status = ?'),
+      ['no_quota', 'NO_QUOTA_ON_ENQUEUE', 'job-1']
     );
   });
 });
