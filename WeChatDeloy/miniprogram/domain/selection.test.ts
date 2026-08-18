@@ -25,8 +25,20 @@ import {
   MAX_NOTE_LENGTH,
 } from './selection';
 import { isValidMealType } from './types';
+import { getToday } from './date';
 
-const baseState = createInitialState('2026-08-17', 'lunch');
+// 用相对日期避免 fixture 随时间漂移；模块加载时算一次
+const TODAY = getToday();
+const TOMORROW_DATE = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+})();
+
+const baseState = createInitialState(TODAY, 'lunch');
 
 const dishA: Dish = {
   id: 'a',
@@ -142,22 +154,22 @@ describe('clearSelection', () => {
   it('empties items but preserves date/mealType', () => {
     const next = clearSelection(addDish(baseState, dishA));
     expect(next.items).toEqual([]);
-    expect(next.date).toBe('2026-08-17');
+    expect(next.date).toBe(TODAY);
     expect(next.mealType).toBe('lunch');
   });
 });
 
 describe('changeDate', () => {
   it('updates date and clears items', () => {
-    const next = changeDate(addDish(baseState, dishA), '2026-08-18');
-    expect(next).toEqual({ date: '2026-08-18', mealType: 'lunch', items: [] });
+    const next = changeDate(addDish(baseState, dishA), TOMORROW_DATE);
+    expect(next).toEqual({ date: TOMORROW_DATE, mealType: 'lunch', items: [] });
   });
 });
 
 describe('changeMealType', () => {
   it('updates mealType and clears items', () => {
     const next = changeMealType(addDish(baseState, dishA), 'dinner');
-    expect(next).toEqual({ date: '2026-08-17', mealType: 'dinner', items: [] });
+    expect(next).toEqual({ date: TODAY, mealType: 'dinner', items: [] });
   });
 });
 
@@ -270,7 +282,7 @@ describe('buildSubmitBody', () => {
   it('maps SelectedDish and preserves imageUrl', () => {
     const s = addDish(addDish(baseState, dishA), dishB);
     const body = buildSubmitBody(s);
-    expect(body.date).toBe('2026-08-17');
+    expect(body.date).toBe(TODAY);
     expect(body.mealType).toBe('lunch');
     expect(body.items).toEqual([
       { dishId: 'a', name: '红烧肉', imageUrl: undefined },
@@ -305,7 +317,7 @@ describe('buildSubmitBody', () => {
 // ---------- T-030 新增：切换确认 ----------
 describe('shouldConfirmOnSwitch', () => {
   it('returns false when selection is empty', () => {
-    expect(shouldConfirmOnSwitch(baseState, { date: '2026-08-18' })).toBe(false);
+    expect(shouldConfirmOnSwitch(baseState, { date: TOMORROW_DATE })).toBe(false);
     expect(shouldConfirmOnSwitch(baseState, { mealType: 'dinner' })).toBe(false);
   });
 
@@ -316,7 +328,7 @@ describe('shouldConfirmOnSwitch', () => {
 
   it('returns true when changing date with unsaved items', () => {
     const s = addDish(baseState, dishA);
-    expect(shouldConfirmOnSwitch(s, { date: '2026-08-18' })).toBe(true);
+    expect(shouldConfirmOnSwitch(s, { date: TOMORROW_DATE })).toBe(true);
   });
 
   it('returns true when changing mealType with unsaved items', () => {

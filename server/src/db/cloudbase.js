@@ -8,12 +8,30 @@ let db = null;
 
 /**
  * 获取 CloudBase 应用实例（单例）
+ *
+ * @cloudbase/node-sdk 3.x 的 normalizeConfig 不会从 process.env 自动读取
+ * TENCENTCLOUD_SECRETID/SECRETKEY/SESSIONTOKEN（见 SDK utils.js 注释：
+ * "不从环境变量读取 ... 并固化到 config 中"）。
+ * 云托管平台会把这些变量注入到容器进程，但 SDK 只在收到
+ * init({ context: { extendedContext: { tmpSecret: {...} } } }) 时才使用它们。
+ * 缺这一步会导致 getDb().collection(...).get() 在请求期抛出
+ * "missing secretId or secretKey of tencent cloud"。
  */
 function getApp() {
   if (!app) {
-    app = require('@cloudbase/node-sdk').init({
-      env: process.env.TCB_ENV_ID || process.env.ENV_ID || 'prod-d8gkzjj6ub74bba3b',
-    });
+    const envId = process.env.TCB_ENV_ID || process.env.ENV_ID || 'prod-d8gkzjj6ub74bba3b';
+    const opts = { env: envId };
+    const sid = process.env.TENCENTCLOUD_SECRETID;
+    const skey = process.env.TENCENTCLOUD_SECRETKEY;
+    const stok = process.env.TENCENTCLOUD_SESSIONTOKEN;
+    if (sid && skey) {
+      opts.context = {
+        extendedContext: {
+          tmpSecret: { secretId: sid, secretKey: skey, token: stok || '' },
+        },
+      };
+    }
+    app = require('@cloudbase/node-sdk').init(opts);
   }
   return app;
 }
@@ -267,27 +285,6 @@ async function consumeQuota(openid) {
 }
 
 // ---------------------------------------------------------------------------
-// 初始化数据库索引（幂等执行）
-// ---------------------------------------------------------------------------
-
-async function ensureIndexes() {
-  const dishesCol = getDb().collection('dishes');
-  const mealPlansCol = getDb().collection('meal_plans');
-  const notifCol = getDb().collection('notification_jobs');
-  const subCol = getDb().collection('notification_subscriptions');
-
-  try {
-    await dishesCol.createIndex({ isActive: 1, category: 1, sortOrder: 1 });
-  } catch (e) { /* 索引已存在 */ }
-  try {
-    await mealPlansCol.createIndex({ ownerOpenid: 1, date: -1 });
-  } catch (e) { /* 索引已存在 */ }
-  try {
-    await notifCol.createIndex({ mealPlanId: 1, mealPlanVersion: 1, channel: 1 }, { unique: true });
-  } catch (e) { /* 索引已存在 */ }
-}
-
-// ---------------------------------------------------------------------------
 // 规范化（把 CloudBase 的 _id 映射为 id，移走内部字段）
 // ---------------------------------------------------------------------------
 
@@ -332,5 +329,4 @@ module.exports = {
   getSubscription,
   upsertSubscription,
   consumeQuota,
-  ensureIndexes,
 };
