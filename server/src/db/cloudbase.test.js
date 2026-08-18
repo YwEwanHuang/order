@@ -39,7 +39,8 @@ let database;
 function mockSchemaQuery(target = mockPool) {
   target.query.mockImplementation(async (sql, params) => {
     if (sql && sql.includes('INFORMATION_SCHEMA.COLUMNS')) {
-      const tableName = params[0];
+      // params: [DATABASE_NAME, tableName] — tableName 在 params[1]
+      const tableName = params && params[1];
       const cols = SCHEMA_COLUMNS[tableName] || [];
       return [cols.map(c => ({ COLUMN_NAME: c })), []];
     }
@@ -395,5 +396,47 @@ describe('notification job helpers', () => {
       expect.stringContaining('status = ?'),
       ['no_quota', 'NO_QUOTA_ON_ENQUEUE', 'job-1']
     );
+  });
+});
+
+describe('getTableColumns() uses hardcoded DATABASE_NAME (not DATABASE())', () => {
+  // 回归：pool 没设 database 选项，DATABASE() 返回 NULL，0 行 → sel 空 → SQL 语法错误 500
+  it('passes [DATABASE_NAME, table] as bind params to INFORMATION_SCHEMA', async () => {
+    mockPool.query.mockImplementation(async (sql, params) => {
+      if (sql && sql.includes('INFORMATION_SCHEMA.COLUMNS')) {
+        return [SCHEMA_COLUMNS.dishes.map(c => ({ COLUMN_NAME: c })), []];
+      }
+      return [[], []];
+    });
+
+    await database.getActiveDishes();
+
+    const infoSchemaCall = mockPool.query.mock.calls.find(
+      ([sql]) => sql && sql.includes('INFORMATION_SCHEMA.COLUMNS')
+    );
+    expect(infoSchemaCall).toBeDefined();
+    // 旧实现参数是 [table]，新实现是 [DATABASE_NAME, table]
+    expect(infoSchemaCall[1]).toHaveLength(2);
+    expect(infoSchemaCall[1][1]).toBe('dishes');
+    expect(typeof infoSchemaCall[1][0]).toBe('string');
+    expect(infoSchemaCall[1][0].length).toBeGreaterThan(0);
+  });
+
+  it('SQL does not reference DATABASE() — uses parameter binding', async () => {
+    mockPool.query.mockImplementation(async (sql, params) => {
+      if (sql && sql.includes('INFORMATION_SCHEMA.COLUMNS')) {
+        return [SCHEMA_COLUMNS.dishes.map(c => ({ COLUMN_NAME: c })), []];
+      }
+      return [[], []];
+    });
+
+    await database.getActiveDishes();
+
+    const sql = mockPool.query.mock.calls
+      .map(([s]) => s)
+      .find(s => s && s.includes('INFORMATION_SCHEMA.COLUMNS'));
+    expect(sql).toBeDefined();
+    expect(sql).not.toMatch(/DATABASE\(\)/);
+    expect(sql).toMatch(/TABLE_SCHEMA\s*=\s*\?/);
   });
 });

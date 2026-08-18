@@ -93,10 +93,12 @@ const columnCache = new Map();
 
 async function getTableColumns(db, table) {
   if (columnCache.has(table)) return columnCache.get(table);
+  // 显式传 DATABASE_NAME，不用 DATABASE()：pool 没设 database 选项，
+  // 否则 DATABASE() 在生产返回 NULL，查询永远 0 行 → sel 为空 → SQL 语法错误。
   const [rows] = await db.query(
     `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
-    [table]
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
+    [DATABASE_NAME, table]
   );
   const cols = new Set(rows.map(r => r.COLUMN_NAME));
   columnCache.set(table, cols);
