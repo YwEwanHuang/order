@@ -29,6 +29,7 @@ jest.mock('../db/cloudbase', () => ({
   upsertSubscription: jest.fn(),
   consumeQuota: jest.fn(),
   getPool: jest.fn(() => mockPool),
+  getTableColumns: jest.fn(),
 }), { virtual: true });
 
 const request = require('supertest');
@@ -69,7 +70,13 @@ describe('GET /internal/notify/pending-jobs', () => {
   });
 
   it('returns jobs array with correct token', async () => {
-    const now = Date.now();
+    const fullCols = (cols) => new Set(cols);
+    cloudbase.getTableColumns.mockImplementation(async (_pool, table) => {
+      if (table === 'notification_jobs') return fullCols(['id', 'meal_plan_id', 'meal_plan_version', 'recipient_openid', 'channel', 'status', 'created_at']);
+      if (table === 'notification_subscriptions') return fullCols(['recipient_openid', 'template_id']);
+      if (table === 'meal_plans') return fullCols(['id', 'date', 'items']);
+      return fullCols([]);
+    });
     mockPool.execute.mockResolvedValue([[
       {
         id: 'job-001',
@@ -97,6 +104,13 @@ describe('GET /internal/notify/pending-jobs', () => {
   });
 
   it('returns empty array when no pending jobs', async () => {
+    const fullCols = (cols) => new Set(cols);
+    cloudbase.getTableColumns.mockImplementation(async (_pool, table) => {
+      if (table === 'notification_jobs') return fullCols(['id', 'meal_plan_id', 'meal_plan_version', 'recipient_openid', 'channel', 'status', 'created_at']);
+      if (table === 'notification_subscriptions') return fullCols(['recipient_openid', 'template_id']);
+      if (table === 'meal_plans') return fullCols(['id', 'date', 'items']);
+      return fullCols([]);
+    });
     mockPool.execute.mockResolvedValue([[]]);
 
     const res = await request(app)

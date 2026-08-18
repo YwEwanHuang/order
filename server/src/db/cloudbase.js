@@ -81,19 +81,31 @@ async function safeCreate(db, sql) {
 
 async function migrateColumn(pool, table, column, definition) {
   try {
-    await db.query(sql);
-  } catch (err) {
-    console.warn('[ensureSchema] table create warning (non-fatal)', err.code);
-  }
-}
-
-async function migrateColumn(pool, table, column, definition) {
-  try {
     await pool.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
   } catch (err) {
     // ER_DUP_FIELDNAME = 列已存在，其他错误则抛出
     if (err.code !== 'ER_DUP_FIELDNAME') throw err;
   }
+}
+
+// 表列名缓存（schema 在运行时不变）。空 Set 表示没查到任何列。
+const columnCache = new Map();
+
+async function getTableColumns(db, table) {
+  if (columnCache.has(table)) return columnCache.get(table);
+  const [rows] = await db.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+    [table]
+  );
+  const cols = new Set(rows.map(r => r.COLUMN_NAME));
+  columnCache.set(table, cols);
+  return cols;
+}
+
+// 从一组候选列中挑出表里实际存在的那些，保持原顺序
+function pickExisting(columns, actual) {
+  return columns.filter(c => actual.has(c));
 }
 
 async function ensureSchema() {
@@ -104,7 +116,8 @@ async function ensureSchema() {
     );
   } catch (err) {
     if (err.code !== 'ER_DB_CREATE_EXISTS' && err.code !== 'ER_ACCESS_DENIED_ERROR') {
-      console.warn('[ensureSchema] database create warning (non-fatal)', err.code);
+      // 非致命错误：仅记录，不阻断启动（旧表可能已有同名 database）
+      console.error('[ensureSchema] database setup warning', { errName: err.name, errCode: err.code });
     }
   }
 
@@ -218,7 +231,20 @@ async function ensureSchema() {
 
 // ---------------------------------------------------------------------------
 // dishes
+// 列名集合按实际 information_schema 动态取，无列则跳过（route 层 normalize 提供默认值）
 // ---------------------------------------------------------------------------
+
+const DISH_BASE_COLS = ['id', 'name', 'category', 'is_active', 'sort_order', 'created_at', 'updated_at'];
+const DISH_OPTIONAL_COLS = ['description', 'image_url', 'created_by'];
+
+async function selectDishes(where, params, orderBy = 'sort_order ASC, name ASC') {
+  const db = getPool();
+  const cols = await getTableColumns(db, 'dishes');
+  const sel = pickExisting([...DISH_BASE_COLS, ...DISH_OPTIONAL_COLS], cols);
+  const sql = `SELECT ${sel.join(', ')} FROM ${TABLE.dishes} ${where}${orderBy ? ' ORDER BY ' + orderBy : ''}`;
+  const [rows] = await db.execute(sql, params);
+  return rows.map(normalizeDish);
+}
 
 async function getActiveDishes({ category } = {}) {
   const params = [];
@@ -227,33 +253,16 @@ async function getActiveDishes({ category } = {}) {
     where += ' AND category = ?';
     params.push(category);
   }
-  const [rows] = await getPool().execute(
-    `SELECT id, name, category, description, image_url, is_active, sort_order, created_by
-     FROM ${TABLE.dishes}
-     ${where}
-     ORDER BY sort_order ASC, name ASC`,
-    params
-  );
-  return rows.map(normalizeDish);
+  return selectDishes(where, params);
 }
 
 async function getAllDishes() {
-  const [rows] = await getPool().execute(
-    `SELECT id, name, category, description, image_url, is_active, sort_order, created_by
-     FROM ${TABLE.dishes}
-     ORDER BY sort_order ASC, name ASC`,
-    []
-  );
-  return rows.map(normalizeDish);
+  return selectDishes('', []);
 }
 
 async function getDishById(id) {
-  const [rows] = await getPool().execute(
-    `SELECT id, name, category, description, image_url, is_active, sort_order, created_by
-     FROM ${TABLE.dishes} WHERE id = ? LIMIT 1`,
-    [id]
-  );
-  return rows[0] ? normalizeDish(rows[0]) : null;
+  const dishes = await selectDishes('WHERE id = ? LIMIT 1', [id], null);
+  return dishes[0] || null;
 }
 
 async function createDish(fields) {
@@ -269,22 +278,23 @@ async function createDish(fields) {
     sortOrder: Number(fields.sortOrder) || 0,
     createdBy: fields.createdBy || '',
   };
-  await getPool().execute(
-    `INSERT INTO ${TABLE.dishes}
-      (id, name, category, description, image_url, is_active, sort_order, created_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      record.id,
-      record.name,
-      record.category,
-      record.description,
-      record.imageUrl,
-      record.isActive ? 1 : 0,
-      record.sortOrder,
-      record.createdBy,
-      now,
-      now,
-    ]
+  const db = getPool();
+  const cols = await getTableColumns(db, 'dishes');
+  const candidates = {
+    id, name: record.name, category: record.category,
+    description: record.description, image_url: record.imageUrl,
+    is_active: record.isActive ? 1 : 0, sort_order: record.sortOrder,
+    created_by: record.createdBy, created_at: now, updated_at: now,
+  };
+  const useCols = pickExisting(Object.keys(candidates), cols);
+  if (useCols.length === 0) {
+    throw new Error('dishes 表无主键 id，无法插入');
+  }
+  const placeholders = useCols.map(() => '?').join(', ');
+  const values = useCols.map(c => candidates[c]);
+  await db.execute(
+    `INSERT INTO ${TABLE.dishes} (${useCols.join(', ')}) VALUES (${placeholders})`,
+    values
   );
   return record;
 }
@@ -298,17 +308,23 @@ async function updateDish(id, fields) {
     isActive: 'is_active',
     sortOrder: 'sort_order',
   };
+  const db = getPool();
+  const cols = await getTableColumns(db, 'dishes');
   const assignments = [];
   const values = [];
   for (const [field, column] of Object.entries(columnMap)) {
     if (fields[field] === undefined) continue;
+    if (!cols.has(column)) continue;
     assignments.push(`${column} = ?`);
     values.push(field === 'isActive' ? (fields[field] ? 1 : 0) : fields[field]);
   }
   if (assignments.length > 0) {
-    assignments.push('updated_at = ?');
-    values.push(Date.now(), id);
-    await getPool().execute(
+    if (cols.has('updated_at')) {
+      assignments.push('updated_at = ?');
+      values.push(Date.now());
+    }
+    values.push(id);
+    await db.execute(
       `UPDATE ${TABLE.dishes} SET ${assignments.join(', ')} WHERE id = ?`,
       values
     );
@@ -317,15 +333,29 @@ async function updateDish(id, fields) {
 }
 
 async function deleteDish(id) {
-  await getPool().execute(
-    `UPDATE ${TABLE.dishes} SET is_active = 0, updated_at = ? WHERE id = ?`,
-    [Date.now(), id]
+  const db = getPool();
+  const cols = await getTableColumns(db, 'dishes');
+  const sets = [];
+  const values = [];
+  if (cols.has('is_active')) { sets.push('is_active = 0'); }
+  if (cols.has('updated_at')) { sets.push('updated_at = ?'); values.push(Date.now()); }
+  if (sets.length === 0) return;
+  values.push(id);
+  await db.execute(
+    `UPDATE ${TABLE.dishes} SET ${sets.join(', ')} WHERE id = ?`,
+    values
   );
 }
 
 // ---------------------------------------------------------------------------
 // meal_plans
+// 列名按 information_schema 动态取，避免迁移期 ER_BAD_FIELD_ERROR
 // ---------------------------------------------------------------------------
+
+const MEAL_PLAN_CANDIDATE_COLS = [
+  'id', 'owner_openid', 'date', 'meal_type', 'items', 'note', 'version',
+  'created_at', 'updated_at',
+];
 
 function generateMealPlanId(openid, date, mealType) {
   const str = `${openid}:${date}:${mealType}`;
@@ -335,6 +365,15 @@ function generateMealPlanId(openid, date, mealType) {
     hash |= 0;
   }
   return `mp_${Math.abs(hash).toString(36)}`;
+}
+
+async function selectMealPlans(whereClause, params, orderBy = '`date` DESC, created_at DESC', limit = null) {
+  const db = getPool();
+  const cols = await getTableColumns(db, 'meal_plans');
+  const sel = pickExisting(MEAL_PLAN_CANDIDATE_COLS, cols);
+  const sql = `SELECT ${sel.join(', ')} FROM ${TABLE.mealPlans} ${whereClause} ORDER BY ${orderBy}${limit ? ' LIMIT ' + Number(limit) : ''}`;
+  const [rows] = await db.execute(sql, params);
+  return rows.map(normalizeMealPlan);
 }
 
 async function getMealPlansByUser(openid, { from, to } = {}) {
@@ -348,21 +387,12 @@ async function getMealPlansByUser(openid, { from, to } = {}) {
     where.push('`date` <= ?');
     params.push(to);
   }
-  const [rows] = await getPool().execute(
-    `SELECT * FROM ${TABLE.mealPlans}
-     WHERE ${where.join(' AND ')}
-     ORDER BY \`date\` DESC, created_at DESC`,
-    params
-  );
-  return rows.map(normalizeMealPlan);
+  return selectMealPlans(`WHERE ${where.join(' AND ')}`, params);
 }
 
 async function getMealPlanById(id) {
-  const [rows] = await getPool().execute(
-    `SELECT * FROM ${TABLE.mealPlans} WHERE id = ? LIMIT 1`,
-    [id]
-  );
-  return rows[0] ? normalizeMealPlan(rows[0]) : null;
+  const rows = await selectMealPlans('WHERE id = ? LIMIT 1', [id], 'created_at DESC', 1);
+  return rows[0] || null;
 }
 
 async function upsertMealPlan(openid, date, mealType, items, note, version) {
@@ -371,8 +401,10 @@ async function upsertMealPlan(openid, date, mealType, items, note, version) {
   const connection = await getPool().getConnection();
   try {
     await connection.beginTransaction();
+    const cols = await getTableColumns(connection, 'meal_plans');
+    const selectCols = pickExisting(MEAL_PLAN_CANDIDATE_COLS, cols);
     const [rows] = await connection.execute(
-      `SELECT * FROM ${TABLE.mealPlans} WHERE id = ? FOR UPDATE`,
+      `SELECT ${selectCols.join(', ')} FROM ${TABLE.mealPlans} WHERE id = ? FOR UPDATE`,
       [id]
     );
     const existing = rows[0] ? normalizeMealPlan(rows[0]) : null;
@@ -384,13 +416,32 @@ async function upsertMealPlan(openid, date, mealType, items, note, version) {
         throw err;
       }
       const newVersion = existing.version + 1;
+      // 只更新表里存在的列
+      const setParts = [];
+      const setVals = [];
+      if (cols.has('items')) { setParts.push('items = ?'); setVals.push(JSON.stringify(items)); }
+      if (cols.has('note')) { setParts.push('note = ?'); setVals.push(note || ''); }
+      if (cols.has('version')) { setParts.push('version = ?'); setVals.push(newVersion); }
+      if (cols.has('updated_at')) { setParts.push('updated_at = ?'); setVals.push(now); }
+      if (setParts.length === 0) {
+        // 表结构完全不匹配：跳过写入，按冲突处理
+        const err = new Error('meal_plans 表结构不兼容');
+        err.statusCode = 500;
+        err.code = 'SCHEMA_MISMATCH';
+        throw err;
+      }
+      // 用 version 做乐观锁；列缺失时退化为按 id 更新
+      const whereParts = ['id = ?'];
+      const whereVals = [id];
+      if (cols.has('version')) {
+        whereParts.push('version = ?');
+        whereVals.push(existing.version);
+      }
       const [result] = await connection.execute(
-        `UPDATE ${TABLE.mealPlans}
-         SET items = ?, note = ?, version = ?, updated_at = ?
-         WHERE id = ? AND version = ?`,
-        [JSON.stringify(items), note || '', newVersion, now, id, existing.version]
+        `UPDATE ${TABLE.mealPlans} SET ${setParts.join(', ')} WHERE ${whereParts.join(' AND ')}`,
+        [...setVals, ...whereVals]
       );
-      if (result.affectedRows !== 1) {
+      if (cols.has('version') && result.affectedRows !== 1) {
         const err = new Error('更新失败，请重试');
         err.statusCode = 409;
         err.code = 'VERSION_CONFLICT';
@@ -406,11 +457,29 @@ async function upsertMealPlan(openid, date, mealType, items, note, version) {
       };
     }
 
+    const candidates = {
+      id,
+      owner_openid: openid,
+      'date': date,
+      meal_type: mealType,
+      items: JSON.stringify(items),
+      note: note || '',
+      version: 1,
+      created_at: now,
+      updated_at: now,
+    };
+    const useCols = pickExisting(Object.keys(candidates), cols);
+    if (!useCols.includes('id')) {
+      const err = new Error('meal_plans 表无主键 id');
+      err.statusCode = 500;
+      err.code = 'SCHEMA_MISMATCH';
+      throw err;
+    }
+    const placeholders = useCols.map(() => '?').join(', ');
+    const values = useCols.map(c => candidates[c]);
     await connection.execute(
-      `INSERT INTO ${TABLE.mealPlans}
-        (id, owner_openid, \`date\`, meal_type, items, note, version, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-      [id, openid, date, mealType, JSON.stringify(items), note || '', now, now]
+      `INSERT INTO ${TABLE.mealPlans} (${useCols.join(', ')}) VALUES (${placeholders})`,
+      values
     );
     await connection.commit();
     return {
@@ -434,23 +503,49 @@ async function upsertMealPlan(openid, date, mealType, items, note, version) {
 
 // ---------------------------------------------------------------------------
 // notification_jobs
+// 列名按 information_schema 动态取
 // ---------------------------------------------------------------------------
+
+const JOB_CANDIDATE_COLS = [
+  'id', 'meal_plan_id', 'meal_plan_version', 'recipient_openid', 'channel',
+  'status', 'attempt_count', 'last_error_code', 'created_at', 'sent_at',
+];
 
 async function createNotificationJob(mealPlanId, mealPlanVersion, channel, recipientOpenid) {
   const id = `job-${randomUUID()}`;
-  await getPool().execute(
-    `INSERT INTO ${TABLE.notificationJobs}
-      (id, meal_plan_id, meal_plan_version, recipient_openid, channel, status,
-       attempt_count, last_error_code, created_at, sent_at)
-     VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL, ?, NULL)`,
-    [id, mealPlanId, mealPlanVersion, recipientOpenid, channel, Date.now()]
+  const db = getPool();
+  const cols = await getTableColumns(db, 'notification_jobs');
+  const candidates = {
+    id,
+    meal_plan_id: mealPlanId,
+    meal_plan_version: mealPlanVersion,
+    recipient_openid: recipientOpenid,
+    channel,
+    status: 'pending',
+    attempt_count: 0,
+    last_error_code: null,
+    created_at: Date.now(),
+    sent_at: null,
+  };
+  const useCols = pickExisting(Object.keys(candidates), cols);
+  if (!useCols.includes('id')) {
+    throw new Error('notification_jobs 表无主键 id');
+  }
+  const placeholders = useCols.map(() => '?').join(', ');
+  const values = useCols.map(c => candidates[c]);
+  await db.execute(
+    `INSERT INTO ${TABLE.notificationJobs} (${useCols.join(', ')}) VALUES (${placeholders})`,
+    values
   );
   return id;
 }
 
 async function getNotificationJobs(recipientOpenid) {
-  const [rows] = await getPool().execute(
-    `SELECT * FROM ${TABLE.notificationJobs}
+  const db = getPool();
+  const cols = await getTableColumns(db, 'notification_jobs');
+  const sel = pickExisting(JOB_CANDIDATE_COLS, cols);
+  const [rows] = await db.execute(
+    `SELECT ${sel.join(', ')} FROM ${TABLE.notificationJobs}
      WHERE recipient_openid = ? ORDER BY created_at DESC LIMIT 100`,
     [recipientOpenid]
   );
@@ -458,18 +553,22 @@ async function getNotificationJobs(recipientOpenid) {
 }
 
 async function updateNotificationStatus(id, status, errorCode) {
-  const assignments = ['status = ?'];
-  const values = [status];
-  if (errorCode !== undefined) {
+  const db = getPool();
+  const cols = await getTableColumns(db, 'notification_jobs');
+  const assignments = [];
+  const values = [];
+  if (cols.has('status')) { assignments.push('status = ?'); values.push(status); }
+  if (errorCode !== undefined && cols.has('last_error_code')) {
     assignments.push('last_error_code = ?');
     values.push(errorCode);
   }
-  if (status === 'sent') {
+  if (status === 'sent' && cols.has('sent_at')) {
     assignments.push('sent_at = ?');
     values.push(Date.now());
   }
+  if (assignments.length === 0) return;
   values.push(id);
-  await getPool().execute(
+  await db.execute(
     `UPDATE ${TABLE.notificationJobs} SET ${assignments.join(', ')} WHERE id = ?`,
     values
   );
@@ -533,31 +632,32 @@ function parseItems(value) {
 }
 
 function normalizeMealPlan(row) {
+  const now = Date.now();
   return {
     id: row.id,
-    ownerOpenid: row.owner_openid,
-    date: row.date,
-    mealType: row.meal_type,
+    ownerOpenid: row.owner_openid || '',
+    date: row.date || '',
+    mealType: row.meal_type || '',
     items: parseItems(row.items),
     note: row.note || '',
     version: Number(row.version) || 1,
-    createdAt: new Date(Number(row.created_at)).toISOString(),
-    updatedAt: new Date(Number(row.updated_at)).toISOString(),
+    createdAt: row.created_at ? new Date(Number(row.created_at)).toISOString() : new Date(now).toISOString(),
+    updatedAt: row.updated_at ? new Date(Number(row.updated_at)).toISOString() : new Date(now).toISOString(),
   };
 }
 
 function normalizeNotificationJob(row) {
   return {
     _id: row.id,
-    mealPlanId: row.meal_plan_id,
-    mealPlanVersion: row.meal_plan_version,
-    recipientOpenid: row.recipient_openid,
-    channel: row.channel,
-    status: row.status,
-    attemptCount: row.attempt_count,
-    lastErrorCode: row.last_error_code,
-    createdAt: Number(row.created_at),
-    sentAt: row.sent_at === null ? null : Number(row.sent_at),
+    mealPlanId: row.meal_plan_id || '',
+    mealPlanVersion: Number(row.meal_plan_version) || 1,
+    recipientOpenid: row.recipient_openid || '',
+    channel: row.channel || '',
+    status: row.status || 'pending',
+    attemptCount: Number(row.attempt_count) || 0,
+    lastErrorCode: row.last_error_code || null,
+    createdAt: Number(row.created_at) || 0,
+    sentAt: row.sent_at === null || row.sent_at === undefined ? null : Number(row.sent_at),
   };
 }
 
@@ -592,4 +692,5 @@ module.exports = {
   consumeQuota,
   // Exported for unit testing only
   getPool,
+  getTableColumns,
 };

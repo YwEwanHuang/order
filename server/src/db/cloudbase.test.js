@@ -7,6 +7,14 @@ process.env.MYSQL_ADDRESS = '127.0.0.1:3306';
 process.env.MYSQL_USERNAME = 'root';
 process.env.MYSQL_PASSWORD = 'password';
 
+// 默认 INFORMATION_SCHEMA 视图返回的列集合，按迁移后完整 schema 给齐
+const SCHEMA_COLUMNS = {
+  dishes: ['id', 'name', 'category', 'description', 'image_url', 'is_active', 'sort_order', 'created_by', 'created_at', 'updated_at'],
+  meal_plans: ['id', 'owner_openid', 'date', 'meal_type', 'items', 'note', 'version', 'created_at', 'updated_at'],
+  notification_jobs: ['id', 'meal_plan_id', 'meal_plan_version', 'recipient_openid', 'channel', 'status', 'attempt_count', 'last_error_code', 'created_at', 'sent_at'],
+  notification_subscriptions: ['recipient_openid', 'template_id', 'remaining_quota', 'accepted_at', 'consumed_at'],
+};
+
 const mockPool = {
   query: jest.fn(),
   execute: jest.fn(),
@@ -15,6 +23,7 @@ const mockPool = {
 
 const mockConnection = {
   beginTransaction: jest.fn(),
+  query: jest.fn(),
   execute: jest.fn(),
   commit: jest.fn(),
   rollback: jest.fn(),
@@ -27,11 +36,23 @@ jest.mock('mysql2/promise', () => ({
 
 let database;
 
+function mockSchemaQuery(target = mockPool) {
+  target.query.mockImplementation(async (sql, params) => {
+    if (sql && sql.includes('INFORMATION_SCHEMA.COLUMNS')) {
+      const tableName = params[0];
+      const cols = SCHEMA_COLUMNS[tableName] || [];
+      return [cols.map(c => ({ COLUMN_NAME: c })), []];
+    }
+    return [[], []];
+  });
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
-  mockPool.query.mockResolvedValue([{}, []]);
+  mockSchemaQuery();
   mockPool.execute.mockResolvedValue([[], []]);
   mockPool.getConnection.mockResolvedValue(mockConnection);
+  mockSchemaQuery(mockConnection);
   mockConnection.beginTransaction.mockResolvedValue();
   mockConnection.execute.mockResolvedValue([[], []]);
   mockConnection.commit.mockResolvedValue();

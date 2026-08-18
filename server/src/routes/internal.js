@@ -5,7 +5,12 @@
  */
 const express = require('express');
 const router = express.Router();
-const { getNotificationJobs, updateNotificationStatus, getPool } = require('../db/cloudbase');
+const {
+  getNotificationJobs,
+  updateNotificationStatus,
+  getPool,
+  getTableColumns,
+} = require('../db/cloudbase');
 
 const TABLE = '`manmanorder`.`notification_jobs`';
 
@@ -30,16 +35,37 @@ function requireInternalToken(req, res, next) {
 router.get('/pending-jobs', requireInternalToken, async (req, res, next) => {
   try {
     const pool = getPool();
+    // 按实际列名构建 SELECT，缺列就跳过该字段（避免迁移期 ER_BAD_FIELD_ERROR）
+    const [jobCols, subCols, mpCols] = await Promise.all([
+      getTableColumns(pool, 'notification_jobs'),
+      getTableColumns(pool, 'notification_subscriptions'),
+      getTableColumns(pool, 'meal_plans'),
+    ]);
+    const sel = [];
+    if (jobCols.has('id')) sel.push('j.id');
+    if (jobCols.has('meal_plan_id')) sel.push('j.meal_plan_id AS mealPlanId');
+    if (jobCols.has('meal_plan_version')) sel.push('j.meal_plan_version AS mealPlanVersion');
+    if (jobCols.has('recipient_openid')) sel.push('j.recipient_openid AS recipientOpenid');
+    if (jobCols.has('channel')) sel.push('j.channel');
+    if (subCols.has('template_id')) sel.push('s.template_id AS templateId');
+    if (mpCols.has('date')) sel.push('mp.date');
+    if (mpCols.has('items')) sel.push('mp.items');
+    if (sel.length === 0) {
+      return res.json({ jobs: [] });
+    }
+    const joinSub = subCols.has('recipient_openid')
+      ? `LEFT JOIN \`manmanorder\`.\`notification_subscriptions\` s
+           ON s.recipient_openid = j.recipient_openid`
+      : '';
+    const joinMp = mpCols.has('id')
+      ? `LEFT JOIN \`manmanorder\`.\`meal_plans\` mp
+           ON mp.id = j.meal_plan_id`
+      : '';
     const [rows] = await pool.execute(
-      `SELECT j.id, j.meal_plan_id AS mealPlanId, j.meal_plan_version AS mealPlanVersion,
-              j.recipient_openid AS recipientOpenid, j.channel,
-              s.template_id AS templateId,
-              mp.date, mp.items
+      `SELECT ${sel.join(', ')}
        FROM ${TABLE} j
-       LEFT JOIN \`manmanorder\`.\`notification_subscriptions\` s
-         ON s.recipient_openid = j.recipient_openid
-       LEFT JOIN \`manmanorder\`.\`meal_plans\` mp
-         ON mp.id = j.meal_plan_id
+       ${joinSub}
+       ${joinMp}
        WHERE j.status = 'pending'
          AND j.channel = 'wechat_subscribe'
        ORDER BY j.created_at ASC
