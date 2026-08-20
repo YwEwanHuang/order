@@ -17,6 +17,7 @@ export interface SelectionState {
   date: string; // YYYY-MM-DD
   mealType: MealType;
   items: SelectedDish[]; // 已选菜品列表
+  note?: string; // 编辑回填的备注
 }
 
 /**

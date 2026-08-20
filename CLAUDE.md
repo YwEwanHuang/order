@@ -2,6 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## AI dev environment
+
+This project is configured for Claude Code development of a WeChat miniprogram. Before editing any code in this repo, read:
+
+`.claude/skills/wechat-miniprogram-dev/SKILL.md`
+
+…then the referenced `references/{architecture,coding-rules,verification}.md` as needed.
+
+Tooling that is wired up:
+
+- **wechat-devtools MCP** (in `.mcp.json`) — drives the WeChat developer tools: open project, compile, read console, navigate, screenshot, automate UI.
+- **cloudbase MCP** (in `.mcp.json`) — for CloudBase cloud functions / cloud run / DB questions.
+- **wechat-devtools Skill** — MCP companion instructions.
+- **miniprogram-automation Skill** — `miniprogram-automator` based E2E scripts.
+- **miniprogram-ci Skill** — `pack-npm` / preview / upload scripts (never auto-upload to production).
+- **cloudbase Skill** — CloudBase development guidelines.
+
+Hard rule for every change: after editing, run the verification loop in
+`.claude/skills/wechat-miniprogram-dev/references/verification.md` (typecheck → real compile in DevTools → screenshot). Do not declare done from source inspection alone.
+
 ## Project Overview
 
 "蔓蔓点菜" (ManmanOrder) is a native TypeScript WeChat miniprogram with an Express API deployed to WeChat Cloud Run. The runtime storage decision in `DECISIONS.md` supersedes older document-database assumptions in `DEVELOPMENT_PLAN.md`.

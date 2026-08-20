@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "wechat-devtools": {
+      "command": "/Users/yiwei/.local/bin/uvx",
+      "args": ["wechat-devtools-mcp"],
+      "env": {
+        "WECHAT_DEVTOOLS_CLI": "/Applications/wechatwebdevtools.app/Contents/MacOS/cli",
+        "WECHAT_PROJECT_PATH": "/Users/yiwei/Library/CloudStorage/OneDrive-个人/Project/ManmanOrder/WeChatDeloy",
+        "PATH": "/opt/homebrew/bin:/Users/yiwei/.local/bin:/usr/bin:/bin"
+      }
+    },
+    "cloudbase": {
+      "command": "/opt/homebrew/bin/npx",
+      "args": ["-y", "@cloudbase/cloudbase-mcp@latest"],
+      "env": {
+        "PATH": "/opt/homebrew/bin:/Users/yiwei/.local/bin:/usr/bin:/bin"
+      }
+    }
+  }
+}

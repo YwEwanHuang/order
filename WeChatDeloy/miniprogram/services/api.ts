@@ -140,9 +140,12 @@ export async function submitMealPlan(
 /** 修改已有点菜记录 */
 export async function updateMealPlan(
   id: string,
-  body: MealPlanSubmit
+  body: MealPlanSubmit,
+  idempotencyKey: string
 ): Promise<MealPlan> {
-  const data = await request<MealPlan>(`/api/v1/meal-plans/${id}`, 'PUT', body);
+  const data = await request<MealPlan>(`/api/v1/meal-plans/${id}`, 'PUT', body, {
+    'Idempotency-Key': idempotencyKey,
+  });
   return handleResponse(data);
 }
 

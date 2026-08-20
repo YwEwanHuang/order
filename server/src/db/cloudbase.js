@@ -206,6 +206,8 @@ async function ensureSchema() {
       'VARCHAR(100) NOT NULL DEFAULT \'\' AFTER items');
     await migrateColumn(db, 'manmanorder.meal_plans', 'version',
       'INT NOT NULL DEFAULT 1 AFTER note');
+    await migrateColumn(db, 'manmanorder.meal_plans', 'idempotency_key',
+      'VARCHAR(128) NULL AFTER version');
     await migrateColumn(db, 'manmanorder.notification_jobs', 'last_error_code',
       'VARCHAR(64) NULL AFTER attempt_count');
     await migrateColumn(db, 'manmanorder.notification_jobs', 'sent_at',
@@ -397,12 +399,22 @@ async function getMealPlanById(id) {
   return rows[0] || null;
 }
 
-async function upsertMealPlan(openid, date, mealType, items, note, version) {
+async function upsertMealPlan(openid, date, mealType, items, note, version, { idempotencyKey, tx: externalTx } = {}) {
   const id = generateMealPlanId(openid, date, mealType);
   const now = Date.now();
-  const connection = await getPool().getConnection();
-  try {
+
+  // 调用方若已持有事务连接则复用；否则自己创建并管理提交
+  let connection;
+  let ownedTransaction = false;
+  if (externalTx) {
+    connection = externalTx;
+  } else {
+    connection = await getPool().getConnection();
     await connection.beginTransaction();
+    ownedTransaction = true;
+  }
+
+  try {
     const cols = await getTableColumns(connection, 'meal_plans');
     const selectCols = pickExisting(MEAL_PLAN_CANDIDATE_COLS, cols);
     const [rows] = await connection.execute(
@@ -411,14 +423,14 @@ async function upsertMealPlan(openid, date, mealType, items, note, version) {
     );
     const existing = rows[0] ? normalizeMealPlan(rows[0]) : null;
     if (existing) {
-      if (version !== undefined && existing.version !== version) {
+      // 版本冲突检查：无论 POST 还是 PUT 都强制要求 version 匹配
+      if (existing.version !== version) {
         const err = new Error('版本冲突');
         err.statusCode = 409;
         err.code = 'VERSION_CONFLICT';
         throw err;
       }
       const newVersion = existing.version + 1;
-      // 只更新表里存在的列
       const setParts = [];
       const setVals = [];
       if (cols.has('items')) { setParts.push('items = ?'); setVals.push(JSON.stringify(items)); }
@@ -426,13 +438,11 @@ async function upsertMealPlan(openid, date, mealType, items, note, version) {
       if (cols.has('version')) { setParts.push('version = ?'); setVals.push(newVersion); }
       if (cols.has('updated_at')) { setParts.push('updated_at = ?'); setVals.push(now); }
       if (setParts.length === 0) {
-        // 表结构完全不匹配：跳过写入，按冲突处理
         const err = new Error('meal_plans 表结构不兼容');
         err.statusCode = 500;
         err.code = 'SCHEMA_MISMATCH';
         throw err;
       }
-      // 用 version 做乐观锁；列缺失时退化为按 id 更新
       const whereParts = ['id = ?'];
       const whereVals = [id];
       if (cols.has('version')) {
@@ -449,7 +459,9 @@ async function upsertMealPlan(openid, date, mealType, items, note, version) {
         err.code = 'VERSION_CONFLICT';
         throw err;
       }
-      await connection.commit();
+      // 修改时：仅 in_app 通知入队，同一事务内
+      await createNotificationJobInTransaction(connection, id, newVersion, 'in_app', openid);
+      if (ownedTransaction) await connection.commit();
       return {
         ...existing,
         items,
@@ -459,6 +471,7 @@ async function upsertMealPlan(openid, date, mealType, items, note, version) {
       };
     }
 
+    // 新建记录
     const candidates = {
       id,
       owner_openid: openid,
@@ -467,6 +480,7 @@ async function upsertMealPlan(openid, date, mealType, items, note, version) {
       items: JSON.stringify(items),
       note: note || '',
       version: 1,
+      idempotency_key: idempotencyKey || null,
       created_at: now,
       updated_at: now,
     };
@@ -483,7 +497,9 @@ async function upsertMealPlan(openid, date, mealType, items, note, version) {
       `INSERT INTO ${TABLE.mealPlans} (${useCols.join(', ')}) VALUES (${placeholders})`,
       values
     );
-    await connection.commit();
+    // 新建时：in_app 通知入队，同一事务内
+    await createNotificationJobInTransaction(connection, id, 1, 'in_app', openid);
+    if (ownedTransaction) await connection.commit();
     return {
       id,
       ownerOpenid: openid,
@@ -496,10 +512,10 @@ async function upsertMealPlan(openid, date, mealType, items, note, version) {
       updatedAt: new Date(now).toISOString(),
     };
   } catch (err) {
-    await connection.rollback();
+    if (ownedTransaction) await connection.rollback();
     throw err;
   } finally {
-    connection.release();
+    if (ownedTransaction) connection.release();
   }
 }
 
@@ -513,10 +529,15 @@ const JOB_CANDIDATE_COLS = [
   'status', 'attempt_count', 'last_error_code', 'created_at', 'sent_at',
 ];
 
-async function createNotificationJob(mealPlanId, mealPlanVersion, channel, recipientOpenid) {
+/**
+ * 在已有数据库连接（事务）内创建通知任务。
+ * 使用 INSERT ... ON DUPLICATE KEY UPDATE 实现幂等：相同 (meal_plan_id,
+ * meal_plan_version, channel, recipient_openid) 的重复调用不会报错，静默处理。
+ * 返回 jobId。
+ */
+async function createNotificationJobInTransaction(connection, mealPlanId, mealPlanVersion, channel, recipientOpenid) {
   const id = `job-${randomUUID()}`;
-  const db = getPool();
-  const cols = await getTableColumns(db, 'notification_jobs');
+  const cols = await getTableColumns(connection, 'notification_jobs');
   const candidates = {
     id,
     meal_plan_id: mealPlanId,
@@ -535,11 +556,17 @@ async function createNotificationJob(mealPlanId, mealPlanVersion, channel, recip
   }
   const placeholders = useCols.map(() => '?').join(', ');
   const values = useCols.map(c => candidates[c]);
-  await db.execute(
-    `INSERT INTO ${TABLE.notificationJobs} (${useCols.join(', ')}) VALUES (${placeholders})`,
+  // 幂等：UNIQUE KEY uq_notification_delivery 拦截重复，ON DUPLICATE KEY UPDATE 吞掉冲突
+  await connection.execute(
+    `INSERT INTO ${TABLE.notificationJobs} (${useCols.join(', ')}) VALUES (${placeholders})
+     ON DUPLICATE KEY UPDATE id = id`,
     values
   );
   return id;
+}
+
+async function createNotificationJob(mealPlanId, mealPlanVersion, channel, recipientOpenid) {
+  return createNotificationJobInTransaction(getPool(), mealPlanId, mealPlanVersion, channel, recipientOpenid);
 }
 
 async function getNotificationJobs(recipientOpenid) {
@@ -605,6 +632,17 @@ async function upsertSubscription(openid, templateId, remainingQuota) {
 
 async function consumeQuota(openid) {
   const [result] = await getPool().execute(
+    `UPDATE ${TABLE.subscriptions}
+     SET remaining_quota = remaining_quota - 1, consumed_at = ?
+     WHERE recipient_openid = ? AND remaining_quota > 0`,
+    [Date.now(), openid]
+  );
+  return result.affectedRows === 1;
+}
+
+/** 在已有事务连接内原子扣配额；外部 caller 负责 commit/rollback */
+async function consumeQuotaInTransaction(connection, openid) {
+  const [result] = await connection.execute(
     `UPDATE ${TABLE.subscriptions}
      SET remaining_quota = remaining_quota - 1, consumed_at = ?
      WHERE recipient_openid = ? AND remaining_quota > 0`,
@@ -687,11 +725,13 @@ module.exports = {
   upsertMealPlan,
   generateMealPlanId,
   createNotificationJob,
+  createNotificationJobInTransaction,
   getNotificationJobs,
   updateNotificationStatus,
   getSubscription,
   upsertSubscription,
   consumeQuota,
+  consumeQuotaInTransaction,
   // Exported for unit testing only
   getPool,
   getTableColumns,

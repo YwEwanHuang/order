@@ -1,0 +1,1079 @@
+openapi: 3.0.3
+info:
+  title: 蔓蔓点菜 API
+  description: |
+    蔓蔓点菜微信小程序后端 REST API。
+
+    **认证方式**：所有标注 requireAuth 的端点需在请求头传递 `X-WX-OPENID: <用户openid>`。
+    管理端点需额外传递 `X-WX-ADMIN: true`。
+
+    **通用错误 envelope**：
+    ```json
+    { "error": { "code": "ERROR_CODE", "message": "中文描述" }, "requestId": "uuid" }
+    ```
+  version: 1.0.0
+  contact:
+    name: 蔓蔓点菜开发组
+servers:
+  - url: https://express-xxx.sh.run.tcloudbase.com
+    description: 云托管生产环境（私有链路，仅 wx.cloud.callContainer 可访问）
+  - url: http://127.0.0.1:8080
+    description: 本地开发
+
+paths:
+  # -------------------------------------------------------------------------
+  # 用户
+  # -------------------------------------------------------------------------
+  /api/v1/me:
+    get:
+      operationId: getMe
+      summary: 获取当前用户信息
+      security: []
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  openid:
+                    type: string
+                    description: 用户 OpenID
+                  isAdmin:
+                    type: boolean
+                    description: 是否为管理员
+                  requestId:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # -------------------------------------------------------------------------
+  # 菜品
+  # -------------------------------------------------------------------------
+  /api/v1/dishes:
+    get:
+      operationId: listDishes
+      summary: 查询菜品列表
+      security: []
+      parameters:
+        - name: category
+          in: query
+          schema:
+            $ref: '#/components/schemas/DishCategory'
+          description: 按分类过滤（hot | cold | soup | staple）
+      responses:
+        '200':
+          description: 菜品列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Dish'
+                  requestId:
+                    type: string
+              example:
+                data:
+                  - id: "dish-tomato-egg"
+                    name: "鸡蛋西红柿"
+                    category: "hot"
+                    description: ""
+                    imageUrl: ""
+                    isActive: true
+                    sortOrder: 10
+                  - id: "dish-rice"
+                    name: "米饭"
+                    category: "staple"
+                    description: ""
+                    imageUrl: ""
+                    isActive: true
+                    sortOrder: 60
+                requestId: "req-abc123"
+
+    post:
+      operationId: createDish
+      summary: 创建菜品（用户菜品，关联当前用户）
+      security:
+        - AuthHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDishPayload'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Dish'
+                  requestId:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/dishes/{id}:
+    get:
+      operationId: getDish
+      summary: 按 ID 获取菜品
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/DishId'
+      responses:
+        '200':
+          description: 菜品详情
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Dish'
+                  requestId:
+                    type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      operationId: updateDish
+      summary: 更新菜品（仅所有者可操作）
+      security:
+        - AuthHeader: []
+      parameters:
+        - $ref: '#/components/parameters/DishId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDishPayload'
+      responses:
+        '200':
+          description: 更新后的菜品
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Dish'
+                  requestId:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      operationId: deleteDish
+      summary: 删除菜品（软删除，仅所有者可操作）
+      security:
+        - AuthHeader: []
+      parameters:
+        - $ref: '#/components/parameters/DishId'
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    nullable: true
+                  requestId:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # -------------------------------------------------------------------------
+  # 点菜计划
+  # -------------------------------------------------------------------------
+  /api/v1/meal-plans:
+    get:
+      operationId: listMealPlans
+      summary: 查询当前用户的点菜记录
+      security:
+        - AuthHeader: []
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+          description: 起始日期（包含），格式 yyyy-MM-dd
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+          description: 结束日期（包含），格式 yyyy-MM-dd
+      responses:
+        '200':
+          description: 点菜记录列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MealPlan'
+                  requestId:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      operationId: createMealPlan
+      summary: 首次提交点菜计划
+      description: |
+        幂等支持：若请求头 `Idempotency-Key` 与历史请求相同，但请求体不同，
+        返回 `409 IDEMPOTENCY_CONFLICT`；相同 key + 相同 body 返回原结果（不重复创建）。
+      security:
+        - AuthHeader: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+          description: 幂等键，相同 key + 相同 body 重放返回原结果
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMealPlanPayload'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MealPlan'
+                  requestId:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+
+  /api/v1/meal-plans/{id}:
+    put:
+      operationId: updateMealPlan
+      summary: 修改已存在的点菜计划
+      description: |
+        **乐观锁**：必须携带当前 `version` 字段；旧 version 返回 `409 VERSION_CONFLICT`。
+        日期和餐次不可修改。
+      security:
+        - AuthHeader: []
+      parameters:
+        - $ref: '#/components/parameters/MealPlanId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMealPlanPayload'
+      responses:
+        '200':
+          description: 更新后的点菜计划
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MealPlan'
+                  requestId:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/VersionConflict'
+
+  # -------------------------------------------------------------------------
+  # 通知订阅与配额
+  # -------------------------------------------------------------------------
+  /api/v1/notifications/subscribe:
+    post:
+      operationId: subscribe
+      summary: 订阅微信通知
+      description: |
+        用户同意订阅消息后，前端调用此接口记录订阅状态。
+        实际消息下发由 notify-admin 定时任务触发。
+      security:
+        - AuthHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - templateId
+              properties:
+                templateId:
+                  type: string
+                  description: 微信订阅消息模板 ID
+                  example: "Zxxxxxxx..."
+                quota:
+                  type: integer
+                  description: 订阅额度（默认 0，由管理员授予）
+                  default: 0
+      responses:
+        '200':
+          description: 订阅成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+                  requestId:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/quota:
+    get:
+      operationId: getQuota
+      summary: 查询当前用户的订阅额度
+      security:
+        - AuthHeader: []
+      responses:
+        '200':
+          description: 配额信息
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+                  requestId:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # -------------------------------------------------------------------------
+  # 管理端点（需管理员身份）
+  # -------------------------------------------------------------------------
+  /api/v1/admin/dishes:
+    get:
+      operationId: adminListDishes
+      summary: 管理员查询全部菜品（含已停用）
+      security:
+        - AdminHeader: []
+      responses:
+        '200':
+          description: 全部菜品
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Dish'
+                  requestId:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      operationId: adminCreateDish
+      summary: 管理员创建菜品
+      security:
+        - AdminHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateDishPayload'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Dish'
+                  requestId:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/dishes/{id}:
+    get:
+      operationId: adminGetDish
+      summary: 管理员按 ID 获取菜品
+      security:
+        - AdminHeader: []
+      parameters:
+        - $ref: '#/components/parameters/DishId'
+      responses:
+        '200':
+          description: 菜品详情
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Dish'
+                  requestId:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      operationId: adminUpdateDish
+      summary: 管理员更新菜品
+      description: |
+        支持更新：name、category、description、imageUrl、isActive、sortOrder。
+        imageUrl 必须为 `cloud://` 开头且不超过 512 字符。
+      security:
+        - AdminHeader: []
+      parameters:
+        - $ref: '#/components/parameters/DishId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateDishPayload'
+      responses:
+        '200':
+          description: 更新后的菜品
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Dish'
+                  requestId:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/admin/notifications:
+    get:
+      operationId: adminListNotifications
+      summary: 管理员查询通知任务列表
+      security:
+        - AdminHeader: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/NotificationStatus'
+          description: 按状态过滤（pending | sent | failed | no_quota | rejected）
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: 通知任务列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NotificationJob'
+                  requestId:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/notifications/{id}/retry:
+    post:
+      operationId: adminRetryNotification
+      summary: 管理员重试失败的通知任务
+      description: |
+        - 若任务状态为 `failed` 或 `no_quota`，扣除配额后重试；
+        - 若状态为 `sent`，返回 `409 ALREADY_SENT`；
+        - `in_app` 类型任务跳过配额扣减。
+      security:
+        - AdminHeader: []
+      parameters:
+        - $ref: '#/components/parameters/NotificationJobId'
+      responses:
+        '202':
+          description: 已加入重试队列
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/NotificationJob'
+                  requestId:
+                    type: string
+        '400':
+          description: 任务状态不允许重试（如 pending）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 任务已发送成功，不可重试
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/admin/subscriptions:
+    post:
+      operationId: adminCreateSubscription
+      summary: 管理员为用户开通知额
+      description: |
+        管理员通过此接口为指定用户开通通知权限并授予额度。
+        同一用户重复调用更新剩余额度，不重复创建记录。
+      security:
+        - AdminHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - openid
+                - templateId
+                - quota
+              properties:
+                openid:
+                  type: string
+                  description: 用户 OpenID
+                templateId:
+                  type: string
+                  description: 订阅消息模板 ID
+                quota:
+                  type: integer
+                  minimum: 0
+                  description: 授予的订阅额度
+      responses:
+        '201':
+          description: 创建/更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+                  requestId:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # -------------------------------------------------------------------------
+  # 内部接口（notify-admin 云函数调用）
+  # -------------------------------------------------------------------------
+  /internal/notify/pending-jobs:
+    get:
+      operationId: listPendingJobs
+      summary: 获取待处理的通知任务（内部接口）
+      description: notify-admin 每分钟调用此接口拉取 pending 任务列表。
+      security:
+        - InternalToken: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        '200':
+          description: 待处理通知列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NotificationJob'
+                  requestId:
+                    type: string
+        '401':
+          description: 未提供或 token 错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /internal/notify/jobs/{id}/status:
+    patch:
+      operationId: updateJobStatus
+      summary: 更新通知任务状态（内部接口）
+      description: notify-admin 发送完成后调用此接口回写状态。
+      security:
+        - InternalToken: []
+      parameters:
+        - $ref: '#/components/parameters/NotificationJobId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  $ref: '#/components/schemas/NotificationStatus'
+                errorCode:
+                  type: string
+                  nullable: true
+                  description: 微信错误码（失败时填写）
+      responses:
+        '200':
+          description: 状态已更新
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/NotificationJob'
+                  requestId:
+                    type: string
+        '400':
+          description: 无效状态值
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未提供或 token 错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          description: 数据库更新失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    AuthHeader:
+      type: apiKey
+      in: header
+      name: X-WX-OPENID
+      description: 微信用户 OpenID，由小程序 cloud.getWXContext() 获取并透传
+    AdminHeader:
+      type: apiKey
+      in: header
+      name: X-WX-OPENID
+      description: 管理员 OpenID（需在 ADMIN_OPENIDS 环境变量中配置）
+    InternalToken:
+      type: apiKey
+      in: header
+      name: X-Notify-Token
+      description: notify-admin 与 Express 服务共享的访问令牌（NOTIFY_API_TOKEN 环境变量）
+
+  parameters:
+    DishId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 菜品 ID
+    MealPlanId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 点菜计划 ID
+    NotificationJobId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 通知任务 ID
+
+  schemas:
+    DishCategory:
+      type: string
+      enum: [hot, cold, soup, staple]
+      description: 菜品分类
+
+    Dish:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          maxLength: 30
+        category:
+          $ref: '#/components/schemas/DishCategory'
+        description:
+          type: string
+          maxLength: 100
+        imageUrl:
+          type: string
+          format: uri
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateDishPayload:
+      type: object
+      required: [name, category]
+      properties:
+        name:
+          type: string
+          maxLength: 30
+        category:
+          $ref: '#/components/schemas/DishCategory'
+
+    UpdateDishPayload:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 30
+        category:
+          $ref: '#/components/schemas/DishCategory'
+
+    AdminCreateDishPayload:
+      type: object
+      required: [name, category]
+      properties:
+        name:
+          type: string
+          maxLength: 30
+        category:
+          $ref: '#/components/schemas/DishCategory'
+        description:
+          type: string
+          maxLength: 100
+        imageUrl:
+          type: string
+          maxLength: 512
+          description: 必须为 cloud:// 开头（微信云存储）
+        isActive:
+          type: boolean
+          default: true
+        sortOrder:
+          type: integer
+          default: 0
+
+    AdminUpdateDishPayload:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 30
+        category:
+          $ref: '#/components/schemas/DishCategory'
+        description:
+          type: string
+          maxLength: 100
+        imageUrl:
+          type: string
+          maxLength: 512
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+
+    MealPlanItem:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          description: 菜品 ID
+
+    MealPlan:
+      type: object
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+          format: date
+          description: 就餐日期（yyyy-MM-dd）
+        mealType:
+          type: string
+          enum: [breakfast, lunch, dinner]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MealPlanItem'
+        note:
+          type: string
+          maxLength: 100
+        version:
+          type: integer
+          description: 乐观锁版本号
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateMealPlanPayload:
+      type: object
+      required: [date, mealType, items]
+      properties:
+        date:
+          type: string
+          format: date
+          description: 就餐日期（yyyy-MM-dd），支持今天及未来30天
+        mealType:
+          type: string
+          enum: [breakfast, lunch, dinner]
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/MealPlanItem'
+        note:
+          type: string
+          maxLength: 100
+
+    UpdateMealPlanPayload:
+      type: object
+      required: [items, version]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/MealPlanItem'
+        note:
+          type: string
+          maxLength: 100
+        version:
+          type: integer
+          description: 当前版本号（乐观锁）
+
+    NotificationStatus:
+      type: string
+      enum: [pending, sent, failed, no_quota, rejected]
+
+    NotificationJob:
+      type: object
+      properties:
+        id:
+          type: string
+        mealPlanId:
+          type: string
+        mealPlanVersion:
+          type: integer
+        channel:
+          type: string
+          enum: [in_app, wechat_subscribe]
+        recipientOpenid:
+          type: string
+        status:
+          $ref: '#/components/schemas/NotificationStatus'
+        attemptCount:
+          type: integer
+        lastErrorCode:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        sentAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    Subscription:
+      type: object
+      properties:
+        openid:
+          type: string
+        templateId:
+          type: string
+        remainingQuota:
+          type: integer
+        hasSubscription:
+          type: boolean
+        acceptedAt:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+          required: [code, message]
+      required: [error]
+      example:
+        error:
+          code: "VALIDATION_ERROR"
+          message: "缺少必填字段"
+
+  responses:
+    BadRequest:
+      description: 请求参数校验失败
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "VALIDATION_ERROR"
+              message: "至少选择一道菜"
+
+    Unauthorized:
+      description: 未认证（缺少 X-WX-OPENID）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "UNAUTHORIZED"
+              message: "缺少用户身份"
+
+    Forbidden:
+      description: 无权限
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "FORBIDDEN"
+              message: "无权操作此资源"
+
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "NOT_FOUND"
+              message: "记录不存在"
+
+    VersionConflict:
+      description: 乐观锁版本冲突
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "VERSION_CONFLICT"
+              message: "版本冲突，请刷新后重试"
+
+    IdempotencyConflict:
+      description: 幂等键冲突（相同 key 不同请求体）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "IDEMPOTENCY_CONFLICT"
+              message: "幂等键冲突：请求体不一致"

@@ -2,6 +2,8 @@
 
 > Phase C（集成验证），需要微信云环境真实账号，不可自动化
 
+> 当前状态（2026-08-19 审计快照）：本地 Docker、线上 Cloud Run health、真实云 MySQL 与重启持久化、生产私有链路、开发版/体验版双账号真机和回滚演练均**未验证**。线上 health 检查受本机证书链/超时影响，不能据此推断服务已下线；所有无证据项目保持未勾选。
+
 ---
 
 ## 一、环境准备
@@ -25,24 +27,27 @@
 ### 1.2 订阅消息模板
 
 - [ ] 在微信公众平台申请订阅消息模板（类目：餐饮 > 点餐）
-- [ ] 模板需包含以下字段（关键字可调整，但需与云函数代码中一致）：
-  - `phrase1` — 点菜摘要（如"收到点菜：鸡蛋西红柿、土豆炖豆角"）
-  - `date2` — 点菜日期
-  - `thing3` — 菜品提示（如"点击查看详情"）
+- [ ] 模板需包含以下字段（关键字必须与云函数代码中一致）：
+  - `thing11` — 订单信息（菜名用「、」拼接，≤20 字）
+  - `time26`  — 预定时间（`yyyy-MM-dd HH:mm`，如 `2026-08-18 18:00`）
+  - `time36`  — 下单时间（`yyyy-MM-dd HH:mm`）
+  - `thing4`  — 订单备注（≤20 字）
 - [ ] 将模板 ID 填入 `SUBSCRIBE_TEMPLATE_ID`
 
 ### 1.3 notify-admin 云函数
 
 - [ ] 在微信云开发控制台创建云函数 `notify-admin`
-- [ ] 上传 `cloudfunctions/notify-admin/` 目录（包含 `index.js`、`package.json`）
+- [ ] 上传项目根目录下 `cloudfunctions/notify-admin/`（包含 `index.js`、`package.json`）—— **不要上传** `WeChatDeloy/cloudfunctions/notify-admin/` 的旧副本
 - [ ] 配置环境变量：
 
 | 变量名 | 值 |
 |--------|----|
 | `NOTIFY_API_URL` | Express 服务对外地址，如 `https://express-xxx.sh.run.tcloudbase.com` |
 | `NOTIFY_API_TOKEN` | 与 Cloud Run 中 `NOTIFY_API_TOKEN` 一致 |
+| `SUBSCRIBE_TEMPLATE_ID` | 与 1.2 中申请的模板 ID 一致 |
+| `SUBSCRIBE_ENABLED` | `true`（与 Cloud Run 同步，否则云函数会跳过） |
 
-- [ ] 配置定时触发器（每分钟）：`config.json` 中已定义 `0 * * * * *`
+- [ ] 配置定时触发器（每分钟）：`config.json` 中已定义 `0 */1 * * * * *`
 - [ ] 配置权限：`subscribeMessage.send`
 
 ---
@@ -52,11 +57,8 @@
 ### 2.1 部署 Express API（Cloud Run）
 
 ```bash
-# 进入 server 目录
-cd server
-
-# 容器化构建（需先确认 Dockerfile 存在）
-docker build -t manmanorder-api .
+# 在项目根目录使用根 Dockerfile 构建
+docker build -t manmanorder-api -f Dockerfile .
 
 # 部署到 Cloud Run（具体命令参考 CloudBase CLI 文档）
 tcb cloudrun deploy \
@@ -74,10 +76,7 @@ tcb cloudrun deploy \
 ### 2.2 部署云函数
 
 ```bash
-# 进入项目根目录
-cd WeChatDeloy
-
-# 使用 CloudBase CLI 部署云函数
+# 在项目根目录下（cloudfunctions/ 目录在根目录）
 tcb fn deploy notify-admin
 ```
 
@@ -141,7 +140,20 @@ cd WeChatDeloy/miniprogram && npx tsc --noEmit
 
 ---
 
-## 五、常见问题
+## 五、发布阻塞项与验收记录
+
+- [ ] Docker 镜像可从项目根 Dockerfile 构建，容器 health 检查通过，并保留脱敏日志证据。
+- [ ] 真实云 MySQL 完成表结构/迁移验证；容器重启后菜品、点菜和通知数据仍存在。
+- [ ] 生产业务 API 仅经 `callContainer` 私有链路访问；公网伪造身份头不能访问业务 API。
+- [ ] 线上 health 通过独立网络与有效证书链复核；本轮未验证不表示服务下线。
+- [ ] 云函数部署、权限、定时触发器、配额和状态回写与 3.1–3.5 的数据库结果一致。
+- [ ] 开发版和体验版以普通用户/管理员双账号完成端到端验证；微信通知两分钟内送达并跳转正确记录。
+- [ ] 部署切流与回滚演练完成；回滚后核心 API 可用且数据不丢失。
+- [ ] 日志不含真实密钥、token、openid、数据库凭据或请求正文。
+
+---
+
+## 六、常见问题
 
 | 现象 | 可能原因 |
 |------|----------|

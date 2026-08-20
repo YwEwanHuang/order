@@ -1,8 +1,16 @@
 # 测试计划 — 蔓蔓点菜 MVP
 
-> 文档状态：初稿 v1
-> 编制日期：2026-08-17
+> 文档状态：执行中；2026-08-19 审计快照已同步
+> 编制日期：2026-08-17；最近审计：2026-08-19
 > 覆盖范围：M2–M5 功能测试，不含 M0 订阅真机验证
+
+---
+
+## 0. 当前验证基线（2026-08-19 审计快照）
+
+本节为历史执行结果，不代表本轮重新运行：后端 9 个测试套件、79 项测试通过，语句覆盖率 76.32%、分支覆盖率 58.41%；小程序 `typecheck + build + 93 tests` 通过；小程序覆盖率因缺少 `@vitest/coverage-v8` 未完成；`notify-admin` 25 项测试中 22 项通过、3 项失败，且正式 `npm test` 仍为占位失败命令。
+
+尚未验证：本地 Docker、真实云 MySQL、生产私有链路、线上 health、开发版/体验版双账号真机及回滚。后续代码或环境变化后必须重新执行并更新本节。
 
 ---
 
@@ -166,7 +174,11 @@ server/
 | MP-012 | 首次提交后通知任务创建 | POST + mock notify | 至少创建一条 in_app 任务 |
 | MP-013 | 查询当前用户记录 | GET /meal-plans?from=&to= | 200 + 只含自己 |
 | MP-014 | 查询日期范围 | GET /meal-plans?from=2026-08-01&to=2026-08-31 | 200 + 范围过滤 |
-| MP-015 | 双击防重（同一 Idempotency-Key 重放） | POST 两遍相同 body | 两次都返回 201（幂等）或第二次 200（返回同一结果） |
+| MP-015 | 同 key 同 body 重放 | POST 两遍相同 body | 返回原结果，不新增版本或通知 |
+| MP-018 | 同 key 不同 body | POST 复用 key、改变 body | 409 + `IDEMPOTENCY_CONFLICT` |
+| MP-019 | PUT 缺少 version | PUT 不传 version | 400 + `VALIDATION_ERROR` |
+| MP-020 | 完整服务端校验 | 依次传越界日期、非法餐次、非法 items、超长 note | 全部 400 + `VALIDATION_ERROR` |
+| MP-021 | 编辑备注保留 | 编辑既有记录并不改备注 | 提交体和最终记录保留原备注 |
 | MP-016 | 日期格式校验 | POST /meal-plans { date: '2026-08-17' } | 201 |
 | MP-017 | 日期格式非法 | POST /meal-plans { date: '17/08/2026' } | 400 |
 
@@ -224,6 +236,9 @@ server/
 | C-002 | 菜品被停用后 | 旧 meal_plan 快照仍显示该菜品 |
 | C-003 | 菜品被改名后 | 旧 meal_plan 快照仍显示原名称（快照不变） |
 | C-004 | 通知任务重复触发（同一 mealPlanId+version+channel） | 唯一索引阻止，应只创建一条 |
+| C-005 | 20 次并发双击 | 相同 key 与 body 并发 POST 20 次 | 一个目标版本和一条 `in_app` 通知 |
+| C-006 | 站内通知写入失败 | 模拟 `in_app` 通知写入失败 | 点菜与通知整体回滚 |
+| C-007 | 订阅配额与任务一致性 | 模拟扣减/建任务任一步失败 | 配额、任务和点菜不出现部分提交 |
 
 ### 4.4 API 格式边界
 
@@ -258,8 +273,9 @@ server/
 - 所有 P0 用例必须通过自动化测试
 - P1 用例 100% 自动化
 - P2 用例记录手动测试结果
-- 单元测试覆盖率：domain/ 和 middleware/ ≥ 90% 语句覆盖
-- API 测试覆盖率：所有路由 ≥ 80% 分支覆盖
+- 后端总体语句覆盖率和分支覆盖率均 ≥80%，核心模块 ≥90%
+- 小程序 domain/services ≥90% 覆盖率
+- Windows 和 macOS 从干净依赖运行完整 verify，均以退出码 0 结束
 - 无密钥、openid 明文、请求 body 明文写入测试日志
 
 ---
@@ -271,8 +287,10 @@ server/
 cd WeChatDeloy/miniprogram && npm test
 
 # 后端 API 测试
-cd /Users/yiwei/Library/CloudStorage/OneDrive-个人/Project/ManmanOrder/server && npm test
+cd server && npm test
 
 # 完整验证（包含 lint + 类型检查）
 cd WeChatDeloy/miniprogram && npm run verify
 ```
+
+> 根级 `npm run verify` / `scripts/verify.mjs` 与 CI 尚不存在；在建立前，上述命令不能替代完整质量门。

@@ -50,6 +50,7 @@ Page({
       selection,
       existingPlanId: options.planId || null,
       existingVersion: parseInt(options.version || '0', 10),
+      note: selection.note || '',
     });
   },
 
@@ -77,7 +78,7 @@ Page({
     let savedPlan: MealPlan | null = null;
     try {
       if (existingPlanId) {
-        savedPlan = await updateMealPlan(existingPlanId, body);
+        savedPlan = await updateMealPlan(existingPlanId, body, generateIdempotencyKey());
       } else {
         savedPlan = await submitMealPlan(body, generateIdempotencyKey());
       }

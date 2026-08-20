@@ -48,6 +48,7 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+tmp/
 
 # Git internals
 HANDOFF.md
@@ -58,3 +59,10 @@ HANDOFF.md
 # Word documents (review/feedback only)
 *.docx
 *.doc
+
+# Claude Code worktrees and agent scratch
+.claude/worktrees/
+
+# miniprogram-ci local artefacts (preview/upload keys, qrcode png)
+.mprc.json
+private.key

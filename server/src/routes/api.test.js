@@ -169,6 +169,34 @@ describe('admin dishes routes', () => {
       expect(res.status).toBe(201);
       expect(res.body.data.name).toBe('番茄炒蛋');
     });
+
+    it('API-016a: rejects non-cloud:// imageUrl', async () => {
+      const res = await request(app)
+        .post('/api/v1/admin/dishes')
+        .set('X-WX-OPENID', 'admin-1')
+        .send({ name: '红烧肉', category: 'hot', imageUrl: 'https://example.com/image.jpg' });
+      expect(res.status).toBe(400);
+      expect(res.body.error.message).toContain('cloud://');
+    });
+
+    it('API-016b: rejects imageUrl > 512 chars', async () => {
+      const res = await request(app)
+        .post('/api/v1/admin/dishes')
+        .set('X-WX-OPENID', 'admin-1')
+        .send({ name: '红烧肉', category: 'hot', imageUrl: 'cloud://xxx/' + 'x'.repeat(504) });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('API-016c: accepts cloud:// imageUrl', async () => {
+      const newDish = { id: 'dish-5', name: '红烧肉', category: 'hot', imageUrl: 'cloud://abc123/test.jpg' };
+      cloudbase.createDish.mockResolvedValue(newDish);
+      const res = await request(app)
+        .post('/api/v1/admin/dishes')
+        .set('X-WX-OPENID', 'admin-1')
+        .send({ name: '红烧肉', category: 'hot', imageUrl: 'cloud://abc123/test.jpg' });
+      expect(res.status).toBe(201);
+    });
   });
 
   describe('PATCH /api/v1/admin/dishes/:id', () => {
@@ -232,7 +260,18 @@ describe('admin notification routes', () => {
   });
 
   describe('POST /api/v1/admin/notifications/:id/retry', () => {
+    const wechatJob = (overrides = {}) => ({
+      _id: 'job-1',
+      mealPlanId: 'mp_abc',
+      channel: 'wechat_subscribe',
+      status: 'failed',
+      attemptCount: 1,
+      createdAt: Date.now(),
+      ...overrides,
+    });
+
     it('API-031: returns 409 when no quota', async () => {
+      cloudbase.getNotificationJobs.mockResolvedValue([wechatJob()]);
       cloudbase.consumeQuota.mockResolvedValue(false);
       const res = await request(app)
         .post('/api/v1/admin/notifications/job-1/retry')
@@ -242,12 +281,45 @@ describe('admin notification routes', () => {
     });
 
     it('API-032: returns 202 on successful retry', async () => {
+      cloudbase.getNotificationJobs.mockResolvedValue([wechatJob()]);
       cloudbase.consumeQuota.mockResolvedValue(true);
       cloudbase.updateNotificationStatus.mockResolvedValue({});
       const res = await request(app)
         .post('/api/v1/admin/notifications/job-1/retry')
         .set('X-WX-OPENID', 'admin-1');
       expect(res.status).toBe(202);
+      expect(res.body.data.status).toBe('pending');
+      expect(cloudbase.consumeQuota).toHaveBeenCalledTimes(1);
+      expect(cloudbase.updateNotificationStatus).toHaveBeenCalledWith('job-1', 'pending', null);
+    });
+
+    it('API-032a: returns 404 when job not found', async () => {
+      cloudbase.getNotificationJobs.mockResolvedValue([wechatJob({ _id: 'other' })]);
+      const res = await request(app)
+        .post('/api/v1/admin/notifications/job-1/retry')
+        .set('X-WX-OPENID', 'admin-1');
+      expect(res.status).toBe(404);
+      expect(cloudbase.consumeQuota).not.toHaveBeenCalled();
+    });
+
+    it('API-032b: returns 400 and skips quota drain for in_app job', async () => {
+      cloudbase.getNotificationJobs.mockResolvedValue([wechatJob({ channel: 'in_app' })]);
+      const res = await request(app)
+        .post('/api/v1/admin/notifications/job-1/retry')
+        .set('X-WX-OPENID', 'admin-1');
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('INVALID_CHANNEL');
+      expect(cloudbase.consumeQuota).not.toHaveBeenCalled();
+    });
+
+    it('API-032c: returns 409 and skips quota drain for already-sent job', async () => {
+      cloudbase.getNotificationJobs.mockResolvedValue([wechatJob({ status: 'sent' })]);
+      const res = await request(app)
+        .post('/api/v1/admin/notifications/job-1/retry')
+        .set('X-WX-OPENID', 'admin-1');
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe('ALREADY_SENT');
+      expect(cloudbase.consumeQuota).not.toHaveBeenCalled();
     });
   });
 

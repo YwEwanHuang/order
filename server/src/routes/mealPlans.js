@@ -19,50 +19,37 @@ const {
   createNotificationJob,
   updateNotificationStatus,
   getSubscription,
+  createNotificationJobInTransaction,
+  consumeQuotaInTransaction,
+  getPool,
 } = require('../db/cloudbase');
 
 /**
- * 提交后为每个管理员入队通知：
- * - in_app 兜底通知：所有管理员都能看到
- * - wechat_subscribe：仅当该管理员有订阅额度时创建（consumeQuota 原子扣减）
+ * 为管理员批量入队 wechat_subscribe 通知。
+ * 配额扣减和任务创建在同一个事务内：配额不足则整个事务回滚，
+ * 不留下悬空的通知记录。
  */
-async function enqueueNotifications(planId, planVersion) {
-  const adminOpenids = getAdminOpenids();
-  const jobs = [];
-  if (adminOpenids.length === 0) {
-    // 未配置管理员时，落到提交者本人；不影响主流程
-    jobs.push(createNotificationJob(planId, planVersion, 'in_app', 'unknown-admin')
-      .catch(console.error));
-  } else {
-    for (const adminOpenid of adminOpenids) {
-      jobs.push(createNotificationJob(planId, planVersion, 'in_app', adminOpenid)
-        .catch(console.error));
-      jobs.push(consumeAndEnqueueSubscribe(planId, planVersion, adminOpenid));
-    }
-  }
-  await Promise.all(jobs);
-}
-
-/**
- * 消费一条订阅额度并入队微信订阅消息通知；无额度时跳过
- * 依赖 notify-admin 云函数扫描 pending 任务并调用微信 API 发送
- */
-async function consumeAndEnqueueSubscribe(planId, planVersion, adminOpenid) {
-  // Feature flag: set SUBSCRIBE_ENABLED=true in Cloud Run env to enable wechat_subscribe job creation
+async function enqueueAdminSubscribeNotifications(planId, planVersion) {
   if (process.env.SUBSCRIBE_ENABLED !== 'true') return;
-
+  const adminOpenids = getAdminOpenids();
+  if (adminOpenids.length === 0) return;
+  const connection = await getPool().getConnection();
   try {
-    const { consumeQuota } = require('../db/cloudbase');
-    // Create the job first to reserve the slot; only then consume quota
-    const jobId = await createNotificationJob(planId, planVersion, 'wechat_subscribe', adminOpenid);
-    const consumed = await consumeQuota(adminOpenid);
-    if (!consumed) {
-      // No quota — mark the job we just created as no_quota so no one retries it expecting delivery
-      await updateNotificationStatus(jobId, 'no_quota', 'NO_QUOTA_ON_ENQUEUE');
+    await connection.beginTransaction();
+    for (const adminOpenid of adminOpenids) {
+      const consumed = await consumeQuotaInTransaction(connection, adminOpenid);
+      if (!consumed) {
+        // 无额度：跳过，不创建通知任务
+        continue;
+      }
+      await createNotificationJobInTransaction(connection, planId, planVersion, 'wechat_subscribe', adminOpenid);
     }
+    await connection.commit();
   } catch (e) {
-    // Log only at error level, no credential exposure
+    await connection.rollback();
     console.error('[notify] wechat_subscribe enqueue failed', { errName: e?.name, errCode: e?.code });
+  } finally {
+    connection.release();
   }
 }
 
@@ -83,9 +70,16 @@ router.post('/', requireAuth, async (req, res, next) => {
     const { date, mealType, items, note } = req.body;
 
     // 基础校验
-    if (!date || !mealType || !Array.isArray(items) || items.length === 0) {
+    if (!date || !mealType || !Array.isArray(items)) {
       return res.status(400).json({
         error: { code: 'VALIDATION_ERROR', message: '缺少必填字段' },
+        requestId: req.requestId,
+      });
+    }
+
+    if (items.length === 0) {
+      return res.status(400).json({
+        error: { code: 'VALIDATION_ERROR', message: '至少选择一道菜' },
         requestId: req.requestId,
       });
     }
@@ -97,20 +91,28 @@ router.post('/', requireAuth, async (req, res, next) => {
       });
     }
 
+    const idempotencyKey = req.headers['idempotency-key'];
     const plan = await upsertMealPlan(
       req.user.openid,
       date,
       mealType,
       items,
       note,
-      undefined // 首次提交不传 version
+      undefined, // 首次提交不传 version
+      { idempotencyKey } // 幂等键
     );
 
-    // 异步入队通知（不阻塞响应）
-    enqueueNotifications(plan.id, plan.version).catch(console.error);
+    // 订阅通知在独立事务中入队；失败不阻塞主流程
+    enqueueAdminSubscribeNotifications(plan.id, plan.version).catch(console.error);
 
     res.status(201).json({ data: toPublicDto(plan), requestId: req.requestId });
   } catch (err) {
+    if (err.code === 'IDEMPOTENCY_CONFLICT') {
+      return res.status(409).json({
+        error: { code: 'IDEMPOTENCY_CONFLICT', message: err.message },
+        requestId: req.requestId,
+      });
+    }
     next(err);
   }
 });
@@ -136,6 +138,13 @@ router.put('/:id', requireAuth, async (req, res, next) => {
       });
     }
 
+    if (version === undefined || version === null) {
+      return res.status(400).json({
+        error: { code: 'VALIDATION_ERROR', message: '缺少 version 字段' },
+        requestId: req.requestId,
+      });
+    }
+
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         error: { code: 'VALIDATION_ERROR', message: '至少选择一道菜' },
@@ -152,7 +161,8 @@ router.put('/:id', requireAuth, async (req, res, next) => {
       version
     );
 
-    enqueueNotifications(plan.id, plan.version).catch(console.error);
+    // 订阅通知在独立事务中入队；失败不阻塞主流程
+    enqueueAdminSubscribeNotifications(plan.id, plan.version).catch(console.error);
 
     res.json({ data: toPublicDto(plan), requestId: req.requestId });
   } catch (err) {

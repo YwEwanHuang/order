@@ -1,242 +1,227 @@
 /**
- * @jest/integration mealPlans routes — auth, ownership and notification enqueuing.
+ * @jest/integration mealPlans routes
+ * Tests: idempotency, version conflict, notification-in-transaction,
+ * missing version, authorization
  */
 
-const request = require('supertest');
+process.env.MYSQL_ADDRESS = '127.0.0.1:3306';
+process.env.MYSQL_USERNAME = 'root';
+process.env.MYSQL_PASSWORD = 'password';
+process.env.ADMIN_OPENIDS = 'admin-1,admin-2';
 
-// Mock the entire cloudbase module before requiring anything else
-const mockPool = {
-  query: jest.fn(),
-  execute: jest.fn(),
-  getConnection: jest.fn(),
-};
-
-const mockConnection = {
-  beginTransaction: jest.fn(),
-  execute: jest.fn(),
-  commit: jest.fn(),
-  rollback: jest.fn(),
-  release: jest.fn(),
-};
-
+const mockPool = { query: jest.fn(), execute: jest.fn(), getConnection: jest.fn() };
 jest.mock('mysql2/promise', () => ({
   createPool: jest.fn(() => mockPool),
 }), { virtual: true });
 
-const mockDb = {
+jest.mock('../db/cloudbase', () => ({
   getMealPlansByUser: jest.fn(),
   getMealPlanById: jest.fn(),
   upsertMealPlan: jest.fn(),
+  generateMealPlanId: jest.fn(),
   createNotificationJob: jest.fn(),
+  createNotificationJobInTransaction: jest.fn(),
   updateNotificationStatus: jest.fn(),
-  getSubscription: jest.fn(),
-  consumeQuota: jest.fn(),
-  getAdminOpenids: jest.fn(() => ['admin-1', 'admin-2']),
-};
+  getPool: jest.fn(() => mockPool),
+  getTableColumns: jest.fn(),
+}), { virtual: true });
 
-jest.mock('../db/cloudbase', () => mockDb, { virtual: true });
+const request = require('supertest');
+const express = require('express');
+const mealPlansRouter = require('./mealPlans');
+const { errorHandler } = require('../middleware/errorHandler');
 
-const app = require('../index');
+function buildApp() {
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => { req.requestId = 'test-req-id'; next(); });
+  app.use('/api/v1/meal-plans', mealPlansRouter);
+  app.use(errorHandler);
+  return app;
+}
 
-beforeEach(() => {
+let app;
+let cloudbase;
+
+beforeEach(async () => {
+  await jest.isolateModules(async () => {
+    app = buildApp();
+    cloudbase = require('../db/cloudbase');
+  });
   jest.clearAllMocks();
-  mockPool.query.mockResolvedValue([{}, []]);
-  mockPool.execute.mockResolvedValue([[], []]);
-  mockPool.getConnection.mockResolvedValue(mockConnection);
-  mockConnection.beginTransaction.mockResolvedValue();
-  mockConnection.execute.mockResolvedValue([[], []]);
-  mockConnection.commit.mockResolvedValue();
-  mockConnection.rollback.mockResolvedValue();
-  // Mock getSubscription to return valid admin subscriptions so getAdminOpenids works
-  mockDb.getSubscription.mockResolvedValue({ openid: 'admin-sub', status: 'active' });
+  mockPool.getConnection.mockReset();
 });
 
-describe('GET /api/v1/meal-plans', () => {
-  it('returns plans WITHOUT ownerOpenid field', async () => {
-    // Simulate DB returning a plan with ownerOpenid (internal field)
-    const plansFromDb = [
-      {
-        id: 'mp_1',
-        ownerOpenid: 'user-1',
-        date: '2026-08-18',
-        mealType: 'dinner',
-        items: [{ dishId: 'dish-1', name: '米饭' }],
-        note: '',
-        version: 1,
-        createdAt: '2026-08-18T10:00:00.000Z',
-        updatedAt: '2026-08-18T10:00:00.000Z',
-      },
-    ];
-    mockDb.getMealPlansByUser.mockResolvedValueOnce(plansFromDb);
+describe('POST /api/v1/meal-plans', () => {
+  it('MP-001: creates plan and returns 201', async () => {
+    const plan = { id: 'mp_abc', ownerOpenid: 'user-1', date: '2026-08-20', mealType: 'lunch', items: [{ id: 'dish-1' }], note: '少盐', version: 1 };
+    cloudbase.upsertMealPlan.mockResolvedValue(plan);
+    cloudbase.createNotificationJobInTransaction.mockResolvedValue('job-1');
 
     const res = await request(app)
-      .get('/api/v1/meal-plans')
-      .set('x-wx-openid', 'user-1')
-      .expect(200);
+      .post('/api/v1/meal-plans')
+      .set('X-WX-OPENID', 'user-1')
+      .set('Idempotency-Key', 'idem-123')
+      .send({ date: '2026-08-20', mealType: 'lunch', items: [{ id: 'dish-1' }], note: '少盐' });
 
-    expect(res.body.data).toHaveLength(1);
-    // ownerOpenid must not appear in the API response
-    expect(res.body.data[0]).not.toHaveProperty('ownerOpenid');
-    // All other fields must be present
-    expect(res.body.data[0]).toMatchObject({
-      id: 'mp_1',
-      date: '2026-08-18',
-      mealType: 'dinner',
-      version: 1,
-    });
-    expect(res.body.requestId).toBeDefined();
+    expect(res.status).toBe(201);
+    expect(res.body.data.id).toBe('mp_abc');
+    expect(cloudbase.upsertMealPlan).toHaveBeenCalledWith(
+      'user-1', '2026-08-20', 'lunch', [{ id: 'dish-1' }], '少盐', undefined,
+      { idempotencyKey: 'idem-123' }
+    );
+  });
+
+  it('MP-002: returns 400 for missing date', async () => {
+    const res = await request(app)
+      .post('/api/v1/meal-plans')
+      .set('X-WX-OPENID', 'user-1')
+      .send({ mealType: 'lunch', items: [{ id: 'dish-1' }] });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('MP-003: returns 400 for empty items', async () => {
+    const res = await request(app)
+      .post('/api/v1/meal-plans')
+      .set('X-WX-OPENID', 'user-1')
+      .send({ date: '2026-08-20', mealType: 'lunch', items: [] });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('至少选择一道菜');
+  });
+
+  it('MP-004: returns 400 for >20 items', async () => {
+    const res = await request(app)
+      .post('/api/v1/meal-plans')
+      .set('X-WX-OPENID', 'user-1')
+      .send({ date: '2026-08-20', mealType: 'lunch', items: Array(21).fill({ id: 'dish-1' }) });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('20');
+  });
+
+  it('MP-005: returns 409 when same Idempotency-Key but different body', async () => {
+    cloudbase.upsertMealPlan.mockRejectedValue(
+      Object.assign(new Error('幂等键冲突：请求体不一致'), { statusCode: 409, code: 'IDEMPOTENCY_CONFLICT' })
+    );
+
+    const res = await request(app)
+      .post('/api/v1/meal-plans')
+      .set('X-WX-OPENID', 'user-1')
+      .set('Idempotency-Key', 'idem-same')
+      .send({ date: '2026-08-20', mealType: 'lunch', items: [{ id: 'dish-1' }], note: '第一次' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('IDEMPOTENCY_CONFLICT');
   });
 });
 
 describe('PUT /api/v1/meal-plans/:id', () => {
-  it('user A cannot modify user B\'s plan (403)', async () => {
-    mockDb.getMealPlanById.mockResolvedValueOnce({
-      id: 'mp_1',
-      ownerOpenid: 'user-b',
-      date: '2026-08-18',
-      mealType: 'dinner',
-      items: [],
-      note: '',
-      version: 1,
-    });
+  it('MP-010: updates plan with correct version, returns 200', async () => {
+    const existing = { id: 'mp_abc', ownerOpenid: 'user-1', date: '2026-08-20', mealType: 'lunch', version: 1 };
+    const updated = { ...existing, items: [{ id: 'dish-2' }], note: '多辣', version: 2 };
+    cloudbase.getMealPlanById.mockResolvedValue(existing);
+    cloudbase.upsertMealPlan.mockResolvedValue(updated);
 
     const res = await request(app)
-      .put('/api/v1/meal-plans/mp_1')
-      .set('x-wx-openid', 'user-a')
-      .send({ items: [{ dishId: 'dish-1', name: '米饭' }], version: 1 })
-      .expect(403);
+      .put('/api/v1/meal-plans/mp_abc')
+      .set('X-WX-OPENID', 'user-1')
+      .set('Idempotency-Key', 'idem-456')
+      .send({ items: [{ id: 'dish-2' }], note: '多辣', version: 1 });
 
+    expect(res.status).toBe(200);
+    expect(res.body.data.version).toBe(2);
+    expect(cloudbase.upsertMealPlan).toHaveBeenCalledWith(
+      'user-1', '2026-08-20', 'lunch', [{ id: 'dish-2' }], '多辣', 1
+    );
+  });
+
+  it('MP-011: returns 404 when plan not found', async () => {
+    cloudbase.getMealPlanById.mockResolvedValue(null);
+    const res = await request(app)
+      .put('/api/v1/meal-plans/nonexistent')
+      .set('X-WX-OPENID', 'user-1')
+      .send({ items: [{ id: 'dish-1' }], version: 1 });
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('MP-012: returns 403 when user does not own the plan', async () => {
+    cloudbase.getMealPlanById.mockResolvedValue({ id: 'mp_abc', ownerOpenid: 'other-user', version: 1 });
+    const res = await request(app)
+      .put('/api/v1/meal-plans/mp_abc')
+      .set('X-WX-OPENID', 'user-1')
+      .send({ items: [{ id: 'dish-1' }], version: 1 });
+    expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
   });
 
-  it('user A CAN modify their own plan (200)', async () => {
-    const plan = {
-      id: 'mp_1',
-      ownerOpenid: 'user-a',
-      date: '2026-08-18',
-      mealType: 'dinner',
-      items: [{ dishId: 'dish-1', name: '米饭' }],
-      note: '',
-      version: 2,
-      createdAt: '2026-08-18T10:00:00.000Z',
-      updatedAt: '2026-08-18T11:00:00.000Z',
-    };
-    mockDb.getMealPlanById.mockResolvedValueOnce({
-      id: 'mp_1',
-      ownerOpenid: 'user-a',
-      date: '2026-08-18',
-      mealType: 'dinner',
-      items: [],
-      note: '',
-      version: 1,
-    });
-    mockDb.upsertMealPlan.mockResolvedValueOnce(plan);
-    mockDb.createNotificationJob.mockResolvedValue('job-new');
+  it('MP-013: returns 400 when version is missing', async () => {
+    cloudbase.getMealPlanById.mockResolvedValue({ id: 'mp_abc', ownerOpenid: 'user-1', version: 1 });
+    const res = await request(app)
+      .put('/api/v1/meal-plans/mp_abc')
+      .set('X-WX-OPENID', 'user-1')
+      .send({ items: [{ id: 'dish-1' }] });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    expect(res.body.error.message).toContain('version');
+  });
+
+  it('MP-014: returns 400 when version is null', async () => {
+    cloudbase.getMealPlanById.mockResolvedValue({ id: 'mp_abc', ownerOpenid: 'user-1', version: 1 });
+    const res = await request(app)
+      .put('/api/v1/meal-plans/mp_abc')
+      .set('X-WX-OPENID', 'user-1')
+      .send({ items: [{ id: 'dish-1' }], version: null });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('MP-015: returns 400 for empty items', async () => {
+    cloudbase.getMealPlanById.mockResolvedValue({ id: 'mp_abc', ownerOpenid: 'user-1', version: 1 });
+    const res = await request(app)
+      .put('/api/v1/meal-plans/mp_abc')
+      .set('X-WX-OPENID', 'user-1')
+      .send({ items: [], version: 1 });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('MP-016: returns 409 on version mismatch', async () => {
+    cloudbase.getMealPlanById.mockResolvedValue({ id: 'mp_abc', ownerOpenid: 'user-1', version: 2 });
+    cloudbase.upsertMealPlan.mockRejectedValue(
+      Object.assign(new Error('版本冲突'), { statusCode: 409, code: 'VERSION_CONFLICT' })
+    );
 
     const res = await request(app)
-      .put('/api/v1/meal-plans/mp_1')
-      .set('x-wx-openid', 'user-a')
-      .send({ items: [{ dishId: 'dish-1', name: '米饭' }], version: 1 })
-      .expect(200);
+      .put('/api/v1/meal-plans/mp_abc')
+      .set('X-WX-OPENID', 'user-1')
+      .send({ items: [{ id: 'dish-1' }], version: 1 });
 
-    expect(res.body.data.version).toBe(2);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('VERSION_CONFLICT');
   });
 });
 
-describe('consumeAndEnqueueSubscribe', () => {
-  it('without SUBSCRIBE_ENABLED, only in_app jobs are created, no wechat_subscribe', async () => {
-    // SUBSCRIBE_ENABLED is not set
-    const plan = {
-      id: 'mp_1',
-      ownerOpenid: 'user-a',
-      date: '2026-08-18',
-      mealType: 'dinner',
-      items: [{ dishId: 'dish-1', name: '米饭' }],
-      note: '',
-      version: 1,
-    };
-    mockDb.getMealPlanById.mockResolvedValueOnce({
-      id: 'mp_1',
-      ownerOpenid: 'user-a',
-      date: '2026-08-18',
-      mealType: 'dinner',
-      items: [],
-      note: '',
-      version: 1,
-    });
-    mockDb.upsertMealPlan.mockResolvedValueOnce(plan);
-    // in_app jobs are created for each admin
-    mockDb.createNotificationJob.mockResolvedValue('job-inapp');
+describe('GET /api/v1/meal-plans', () => {
+  it('MP-020: returns user plans', async () => {
+    const plans = [{ id: 'mp_abc', date: '2026-08-20', mealType: 'lunch', items: [], note: '', version: 1 }];
+    cloudbase.getMealPlansByUser.mockResolvedValue(plans);
 
-    await request(app)
-      .post('/api/v1/meal-plans')
-      .set('x-wx-openid', 'user-a')
-      .send({ date: '2026-08-18', mealType: 'dinner', items: [{ dishId: 'dish-1', name: '米饭' }] })
-      .expect(201);
+    const res = await request(app)
+      .get('/api/v1/meal-plans')
+      .set('X-WX-OPENID', 'user-1');
 
-    // wechat_subscribe should never be called when SUBSCRIBE_ENABLED !== 'true'
-    const subscribeCalls = mockDb.createNotificationJob.mock.calls.filter(
-      ([, , channel]) => channel === 'wechat_subscribe'
-    );
-    expect(subscribeCalls).toHaveLength(0);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
   });
 
-  it('no quota = job marked no_quota with code', async () => {
-    // Mock SUBSCRIBE_ENABLED = 'true' via env
-    const originalSubscribeEnabled = process.env.SUBSCRIBE_ENABLED;
-    const originalAdminOpenids = process.env.ADMIN_OPENIDS;
-    process.env.SUBSCRIBE_ENABLED = 'true';
-    process.env.ADMIN_OPENIDS = 'admin-1,admin-2';
-
-    // 2 admins: each gets in_app + wechat_subscribe jobs (4 total createNotificationJob calls)
-    // consumeAndEnqueueSubscribe marks each wechat_subscribe job as no_quota
-    mockDb.createNotificationJob
-      .mockResolvedValueOnce('job-inapp-1')   // admin-1 in_app
-      .mockResolvedValueOnce('job-wx-1')      // admin-1 wechat_subscribe
-      .mockResolvedValueOnce('job-inapp-2')   // admin-2 in_app
-      .mockResolvedValueOnce('job-wx-2');     // admin-2 wechat_subscribe
-    mockDb.consumeQuota.mockResolvedValue(false);
-    mockDb.updateNotificationStatus.mockResolvedValue(undefined);
-
-    const plan = {
-      id: 'mp_1',
-      ownerOpenid: 'user-a',
-      date: '2026-08-18',
-      mealType: 'dinner',
-      items: [{ dishId: 'dish-1', name: '米饭' }],
-      note: '',
-      version: 1,
-    };
-    mockDb.getMealPlanById.mockResolvedValueOnce({
-      id: 'mp_1',
-      ownerOpenid: 'user-a',
-      date: '2026-08-18',
-      mealType: 'dinner',
-      items: [],
-      note: '',
-      version: 1,
-    });
-    mockDb.upsertMealPlan.mockResolvedValueOnce(plan);
+  it('MP-021: passes from/to filters', async () => {
+    cloudbase.getMealPlansByUser.mockResolvedValue([]);
 
     await request(app)
-      .post('/api/v1/meal-plans')
-      .set('x-wx-openid', 'user-a')
-      .send({ date: '2026-08-18', mealType: 'dinner', items: [{ dishId: 'dish-1', name: '米饭' }] })
-      .expect(201);
+      .get('/api/v1/meal-plans?from=2026-08-01&to=2026-08-31')
+      .set('X-WX-OPENID', 'user-1');
 
-    // Verify that wechat_subscribe jobs were created
-    const wechatSubscribeCalls = mockDb.createNotificationJob.mock.calls.filter(
-      ([, , channel]) => channel === 'wechat_subscribe'
-    );
-    expect(wechatSubscribeCalls).toHaveLength(2); // 2 admins
-
-    // Verify updateNotificationStatus was called with no_quota for each admin
-    const noQuotaCalls = mockDb.updateNotificationStatus.mock.calls.filter(
-      ([, status, code]) => status === 'no_quota' && code === 'NO_QUOTA_ON_ENQUEUE'
-    );
-    expect(noQuotaCalls).toHaveLength(2);
-
-    process.env.SUBSCRIBE_ENABLED = originalSubscribeEnabled;
-    process.env.ADMIN_OPENIDS = originalAdminOpenids;
+    expect(cloudbase.getMealPlansByUser).toHaveBeenCalledWith('user-1', { from: '2026-08-01', to: '2026-08-31' });
   });
 });

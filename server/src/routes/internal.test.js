@@ -74,7 +74,7 @@ describe('GET /internal/notify/pending-jobs', () => {
     cloudbase.getTableColumns.mockImplementation(async (_pool, table) => {
       if (table === 'notification_jobs') return fullCols(['id', 'meal_plan_id', 'meal_plan_version', 'recipient_openid', 'channel', 'status', 'created_at']);
       if (table === 'notification_subscriptions') return fullCols(['recipient_openid', 'template_id']);
-      if (table === 'meal_plans') return fullCols(['id', 'date', 'items']);
+      if (table === 'meal_plans') return fullCols(['id', 'date', 'items', 'meal_type', 'note']);
       return fullCols([]);
     });
     mockPool.execute.mockResolvedValue([[
@@ -86,7 +86,10 @@ describe('GET /internal/notify/pending-jobs', () => {
         channel: 'wechat_subscribe',
         templateId: 'tmpl-001',
         date: '2026-08-18',
+        mealType: 'dinner',
         items: JSON.stringify([{ name: '鸡蛋西红柿' }, { name: '土豆炖豆角' }]),
+        note: '少盐',
+        createdAt: 1787011200000,
       },
     ]]);
 
@@ -101,6 +104,11 @@ describe('GET /internal/notify/pending-jobs', () => {
     // phrase 从 items 内容拼出来
     expect(res.body.jobs[0].phrase).toBe('收到点菜：鸡蛋西红柿、土豆炖豆角');
     expect(res.body.jobs[0].todo).toBe('鸡蛋西红柿、土豆炖豆角');
+    // 给云函数填充模板的字段
+    expect(res.body.jobs[0].mealType).toBe('dinner');
+    expect(res.body.jobs[0].note).toBe('少盐');
+    expect(res.body.jobs[0].createdAt).toBe(1787011200000);
+    expect(res.body.jobs[0].dishNames).toEqual(['鸡蛋西红柿', '土豆炖豆角']);
   });
 
   it('returns empty array when no pending jobs', async () => {

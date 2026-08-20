@@ -67,6 +67,26 @@ router.post('/dishes', async (req, res, next) => {
         requestId: req.requestId,
       });
     }
+    if (imageUrl !== undefined && imageUrl !== '') {
+      if (typeof imageUrl !== 'string' || imageUrl.length > 512) {
+        return res.status(400).json({
+          error: { code: 'VALIDATION_ERROR', message: '图片地址格式无效' },
+          requestId: req.requestId,
+        });
+      }
+      if (!imageUrl.startsWith('cloud://')) {
+        return res.status(400).json({
+          error: { code: 'VALIDATION_ERROR', message: '图片地址必须为微信云存储 cloud:// 格式' },
+          requestId: req.requestId,
+        });
+      }
+      if (/[\n\r\t]/.test(imageUrl)) {
+        return res.status(400).json({
+          error: { code: 'VALIDATION_ERROR', message: '图片地址包含非法字符' },
+          requestId: req.requestId,
+        });
+      }
+    }
 
     const dish = await createDish({
       name: name.trim(),
@@ -114,7 +134,15 @@ router.patch('/dishes/:id', async (req, res, next) => {
     }
     if (category !== undefined) updates.category = category;
     if (description !== undefined) updates.description = description?.trim() || '';
-    if (imageUrl !== undefined) updates.imageUrl = imageUrl;
+    if (imageUrl !== undefined) {
+      if (imageUrl !== '' && (typeof imageUrl !== 'string' || imageUrl.length > 512 || !imageUrl.startsWith('cloud://') || /[\n\r\t]/.test(imageUrl))) {
+        return res.status(400).json({
+          error: { code: 'VALIDATION_ERROR', message: '图片地址格式无效' },
+          requestId: req.requestId,
+        });
+      }
+      updates.imageUrl = imageUrl;
+    }
     if (isActive !== undefined) updates.isActive = Boolean(isActive);
     if (sortOrder !== undefined) updates.sortOrder = Number(sortOrder);
 
@@ -144,7 +172,30 @@ router.get('/notifications', async (req, res, next) => {
 router.post('/notifications/:id/retry', async (req, res, next) => {
   try {
     const { id } = req.params;
-    // 重新尝试：检查额度并标记为 pending，等待云函数后续消费
+    // 找到对应任务（仅管理员自己的）
+    const jobs = await getNotificationJobs(req.user.openid);
+    const job = jobs.find(j => j._id === id);
+    if (!job) {
+      return res.status(404).json({
+        error: { code: 'NOT_FOUND', message: '任务不存在' },
+        requestId: req.requestId,
+      });
+    }
+    // 只重试 wechat_subscribe 任务（in_app 无外部消费者，重试没意义，且不应消耗订阅额度）
+    if (job.channel !== 'wechat_subscribe') {
+      return res.status(400).json({
+        error: { code: 'INVALID_CHANNEL', message: '该任务不能重试' },
+        requestId: req.requestId,
+      });
+    }
+    // 已送达的任务不重试
+    if (job.status === 'sent') {
+      return res.status(409).json({
+        error: { code: 'ALREADY_SENT', message: '任务已送达' },
+        requestId: req.requestId,
+      });
+    }
+    // 消耗一次订阅额度
     const consumed = await consumeQuota(req.user.openid);
     if (!consumed) {
       return res.status(409).json({
@@ -152,7 +203,7 @@ router.post('/notifications/:id/retry', async (req, res, next) => {
         requestId: req.requestId,
       });
     }
-    const updated = await updateNotificationStatus(id, 'pending', null);
+    await updateNotificationStatus(id, 'pending', null);
     res.status(202).json({
       data: { id, status: 'pending' },
       requestId: req.requestId,

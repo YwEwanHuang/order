@@ -50,6 +50,7 @@ Page({
       date: plan.date,
       mealType: plan.mealType,
       items: plan.items,
+      note: plan.note || undefined,
     };
     wx.navigateTo({
       url: `/pages/selection/confirm?planId=${plan.id}&version=${plan.version}`,

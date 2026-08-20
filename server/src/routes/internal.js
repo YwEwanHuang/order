@@ -47,9 +47,12 @@ router.get('/pending-jobs', requireInternalToken, async (req, res, next) => {
     if (jobCols.has('meal_plan_version')) sel.push('j.meal_plan_version AS mealPlanVersion');
     if (jobCols.has('recipient_openid')) sel.push('j.recipient_openid AS recipientOpenid');
     if (jobCols.has('channel')) sel.push('j.channel');
+    if (jobCols.has('created_at')) sel.push('j.created_at AS createdAt');
     if (subCols.has('template_id')) sel.push('s.template_id AS templateId');
     if (mpCols.has('date')) sel.push('mp.date');
     if (mpCols.has('items')) sel.push('mp.items');
+    if (mpCols.has('meal_type')) sel.push('mp.meal_type AS mealType');
+    if (mpCols.has('note')) sel.push('mp.note');
     if (sel.length === 0) {
       return res.json({ jobs: [] });
     }
@@ -73,15 +76,17 @@ router.get('/pending-jobs', requireInternalToken, async (req, res, next) => {
     );
 
     const jobs = rows.map(row => {
-      // 从 items JSON 字段提取前几道菜名拼成一句话
+      // 从 items JSON 字段提取菜名（结构化 + 短语都给云函数用）
+      let dishNames = [];
       let phrase = '您收到一条新的点菜通知';
       let todo = '点击查看详情';
       try {
         const items = typeof row.items === 'string' ? JSON.parse(row.items) : (row.items || []);
         if (Array.isArray(items) && items.length > 0) {
-          const names = items.slice(0, 3).map(i => i.name || i.dishName || '').filter(Boolean);
+          dishNames = items.map(i => i.name || i.dishName || '').filter(Boolean);
+          const names = dishNames.slice(0, 3);
           phrase = names.length > 0 ? `收到点菜：${names.join('、')}` : phrase;
-          todo = items.length > 3 ? `等${items.length}道菜` : (names.join('、') || '点菜通知');
+          todo = dishNames.length > 3 ? `等${dishNames.length}道菜` : (names.join('、') || '点菜通知');
         }
       } catch (_) {}
       return {
@@ -92,6 +97,10 @@ router.get('/pending-jobs', requireInternalToken, async (req, res, next) => {
         channel: row.channel,
         templateId: row.templateId || '',
         date: row.date || '',
+        mealType: row.mealType || '',
+        note: row.note || '',
+        createdAt: row.createdAt || null,
+        dishNames,
         phrase,
         todo,
       };
