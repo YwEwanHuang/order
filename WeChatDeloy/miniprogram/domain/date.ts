@@ -167,3 +167,42 @@ export function validateDateForMealPlan(dateStr: string): ValidationResult {
   }
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// Phase 6 新版极简日期 API（看板/点菜提交模块使用）
+// 老 API（getToday / getPickerDateBounds / validateDateForMealPlan 等）
+// 仍被 pages/menu 与 selection.ts 使用，Phase 7+ 清理。
+// ---------------------------------------------------------------------------
+
+const WEEKDAY = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+/** 今天 YYYY-MM-DD（本地时区） */
+export function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/** 在 base 日期上加减 days，返回新 YYYY-MM-DD */
+export function shiftISO(base: string, days: number): string {
+  const d = new Date(base + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/** 看板范围：今天 ~ +6（含两端）；非法日期返回 false */
+export function isInRange(date: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const today = todayISO();
+  const max = shiftISO(today, 6);
+  return date >= today && date <= max;
+}
+
+/** "8月20日 · 周三" 形式的中文展示 */
+export function formatDisplay(date: string): string {
+  const d = new Date(date + 'T00:00:00');
+  return `${d.getMonth() + 1}月${d.getDate()}日 · ${WEEKDAY[d.getDay()]}`;
+}
