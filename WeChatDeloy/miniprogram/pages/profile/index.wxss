@@ -46,40 +46,6 @@
   margin-bottom: 16rpx;
 }
 
-.subscription-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #F9F9F9;
-  border-radius: 8rpx;
-  padding: 20rpx;
-}
-
-.subscription-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6rpx;
-}
-
-.subscription-status {
-  font-size: 28rpx;
-  color: #333333;
-}
-
-.quota-hint {
-  font-size: 24rpx;
-  color: #86C8A0;
-}
-
-.subscription-tip {
-  margin-top: 12rpx;
-  padding: 12rpx;
-  background: #FFF8E6;
-  border-radius: 6rpx;
-  font-size: 24rpx;
-  color: #B8860B;
-}
-
 .menu-list {
   display: flex;
   flex-direction: column;

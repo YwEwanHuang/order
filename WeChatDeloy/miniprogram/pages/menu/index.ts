@@ -40,7 +40,6 @@ Page({
     currentCategory: 'hot',
     showSwitchConfirm: false,
     pendingSwitch: null as { type: 'date' | 'mealType'; value: string } | null,
-    emptyKind: 'category' as 'category' | 'none',
     dateBounds: { start: '', end: '' } as { start: string; end: string },
     /** 首次加载完成后才显示，避免空白闪烁；冷启动显示骨架 */
     initialLoaded: false,
@@ -89,7 +88,6 @@ Page({
         dishes: decorated,
         loading: false,
         initialLoaded: true,
-        emptyKind: dishes.length === 0 ? 'category' : 'category',
       });
     } catch (e: unknown) {
       console.error('[menu] loadDishes failed:', e);

@@ -21,7 +21,6 @@
           <text class="plan-date">{{item.date}}</text>
           <text class="plan-meal-type">{{getMealTypeLabel(item.mealType)}}</text>
         </view>
-        <view class="plan-meta">v{{item.version}}</view>
       </view>
 
       <view class="plan-items">

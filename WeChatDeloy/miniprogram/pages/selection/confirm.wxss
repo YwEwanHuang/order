@@ -131,17 +131,6 @@
   color: #666666;
 }
 
-.notification-line {
-  font-size: 26rpx;
-  margin-top: 4rpx;
-}
-
-.notification-line.pending { color: #B07A1F; }
-.notification-line.sent { color: #1AAD19; }
-.notification-line.no-quota { color: #999999; }
-.notification-line.rejected { color: #999999; }
-.notification-line.failed { color: #E64340; }
-
 .bottom-bar {
   position: fixed;
   bottom: 0;

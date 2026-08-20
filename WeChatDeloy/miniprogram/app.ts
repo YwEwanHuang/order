@@ -4,9 +4,8 @@ App({
   globalData: {
     // 云托管配置（由微信云托管网关注入，客户端代码不包含真实值）
     // 真实值通过环境变量配置在云托管侧
-    cloudEnvId: '',       // 填空字符串，callContainer 使用 cloud.DYNAMIC_CURRENT_ENV 时会自动读取
-    cloudServiceName: '', // 留空，通过 X-WX-SERVICE header 指定
-    cloudBaseUrl: '',
+    cloudEnvId: '',
+    cloudServiceName: '',
   },
 
   onLaunch() {

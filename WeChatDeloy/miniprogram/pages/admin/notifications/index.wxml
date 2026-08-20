@@ -1,40 +1,45 @@
 <!-- pages/admin/notifications/index.wxml -->
 <view class="page">
-  <view wx:if="{{loading && notifications.length === 0}}" class="state-view">
+  <view wx:if="{{loading && groups.length === 0}}" class="state-view">
     <text>加载中...</text>
   </view>
 
-  <view wx:elif="{{error && notifications.length === 0}}" class="state-view">
+  <view wx:elif="{{error && groups.length === 0}}" class="state-view">
     <text class="error-text">{{error}}</text>
-    <button bindtap="loadNotifications" size="mini">重试</button>
+    <button bindtap="loadBoard" size="mini">重试</button>
   </view>
 
-  <view wx:elif="{{notifications.length === 0}}" class="state-view">
-    <text>暂无通知记录</text>
-    <text class="sub">点菜提交后会显示在这里</text>
+  <view wx:elif="{{groups.length === 0}}" class="state-view">
+    <text>暂无点菜记录</text>
   </view>
 
-  <view wx:else class="notification-list">
-    <view wx:for="{{notifications}}" wx:key="id" class="notification-card">
-      <view class="notification-header">
-        <text class="notification-channel">{{item.channelLabel}}</text>
-        <text class="notification-date">{{item.dateLabel}}</text>
-      </view>
-      <view class="notification-body">
-        <text class="notification-title">点菜 v{{item.mealPlanVersion}}</text>
-        <text class="notification-sub">记录 ID: {{item.mealPlanId}}</text>
-      </view>
-      <view class="notification-footer">
-        <view class="notification-status {{item.statusClass}}">
-          <text>{{item.statusLabel}}</text>
+  <view wx:else>
+    <view class="range-bar">
+      <text class="range-text">{{rangeLabel}}</text>
+    </view>
+    <view class="day-list">
+      <view wx:for="{{groups}}" wx:key="date" class="day-block">
+        <view class="day-header">
+          <text class="day-date">{{item.date}}</text>
+          <text class="day-total">共 {{item.total}} 单</text>
         </view>
-        <button
-          wx:if="{{item.retryable}}"
-          size="mini"
-          class="retry-btn"
-          data-id="{{item.id}}"
-          bindtap="onRetryTap"
-        >重试</button>
+        <view wx:if="{{item.plans.length === 0}}" class="day-empty">
+          <text>该日无人点菜</text>
+        </view>
+        <view wx:else class="plan-list">
+          <view wx:for="{{item.plans}}" wx:for-item="plan" wx:key="id" class="plan-card">
+            <view class="plan-header">
+              <text class="plan-meal">{{plan.mealTypeLabel}}</text>
+              <text class="plan-time">{{plan.timeLabel}}</text>
+            </view>
+            <view class="plan-items">
+              <text>{{plan.itemsLabel}}</text>
+            </view>
+            <view wx:if="{{plan.note}}" class="plan-note">
+              <text>备注：{{plan.note}}</text>
+            </view>
+          </view>
+        </view>
       </view>
     </view>
   </view>

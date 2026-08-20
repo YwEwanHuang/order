@@ -44,14 +44,16 @@ Thumbs.db
 
 # Test coverage
 coverage/
+server/coverage/
+
+# TypeScript build artifacts
+*.tsbuildinfo
+ts-out/
 
 # Temporary files
 *.tmp
 *.temp
 tmp/
-
-# Git internals
-HANDOFF.md
 
 # Agent working directory
 .codex/

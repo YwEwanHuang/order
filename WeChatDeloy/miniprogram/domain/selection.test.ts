@@ -18,8 +18,6 @@ import {
   validateNote,
   buildSubmitBody,
   shouldConfirmOnSwitch,
-  generateIdempotencyKey,
-  itemsFingerprint,
   MIN_SELECTION_ITEMS,
   MAX_SELECTION_ITEMS,
   MAX_NOTE_LENGTH,
@@ -298,18 +296,10 @@ describe('buildSubmitBody', () => {
     expect(buildSubmitBody(s, { note: '' }).note).toBeUndefined();
   });
 
-  it('includes version only when a finite number', () => {
-    const s = addDish(baseState, dishA);
-    expect(buildSubmitBody(s, { version: 3 }).version).toBe(3);
-    expect(buildSubmitBody(s, { version: 0 }).version).toBe(0);
-    expect(buildSubmitBody(s, { version: NaN }).version).toBeUndefined();
-    expect(buildSubmitBody(s, { version: undefined }).version).toBeUndefined();
-  });
-
   it('does not mutate input state', () => {
     const s = addDish(baseState, dishA);
     const before = JSON.stringify(s);
-    buildSubmitBody(s, { note: 'x', version: 2 });
+    buildSubmitBody(s, { note: 'x' });
     expect(JSON.stringify(s)).toBe(before);
   });
 });
@@ -339,102 +329,5 @@ describe('shouldConfirmOnSwitch', () => {
   it('returns false when checking date but items are empty (only mealType provided)', () => {
     // 提供 mealType 但与当前相同,所以无须确认
     expect(shouldConfirmOnSwitch(baseState, { mealType: 'lunch' })).toBe(false);
-  });
-});
-
-// ---------- T-030 新增：幂等键 ----------
-describe('itemsFingerprint', () => {
-  it('is order-independent', () => {
-    const items = [
-      { dishId: 'b', name: '凉拌黄瓜' },
-      { dishId: 'a', name: '红烧肉' },
-    ];
-    const reversed = [
-      { dishId: 'a', name: '红烧肉' },
-      { dishId: 'b', name: '凉拌黄瓜' },
-    ];
-    expect(itemsFingerprint(items)).toBe(itemsFingerprint(reversed));
-  });
-
-  it('returns empty string for empty array', () => {
-    expect(itemsFingerprint([])).toBe('');
-  });
-
-  it('does not mutate input', () => {
-    const items = [
-      { dishId: 'b', name: 'B' },
-      { dishId: 'a', name: 'A' },
-    ];
-    const before = JSON.stringify(items);
-    itemsFingerprint(items);
-    expect(JSON.stringify(items)).toBe(before);
-  });
-});
-
-describe('generateIdempotencyKey', () => {
-  const items = [
-    { dishId: 'a', name: '红烧肉' },
-    { dishId: 'b', name: '凉拌黄瓜' },
-  ];
-
-  it('is deterministic for the same input', () => {
-    const a = generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items });
-    const b = generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items });
-    expect(a).toBe(b);
-  });
-
-  it('is order-independent (same items, different order → same key)', () => {
-    const reversed = [...items].reverse();
-    expect(
-      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items })
-    ).toBe(
-      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items: reversed })
-    );
-  });
-
-  it('differs when date changes', () => {
-    expect(
-      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items })
-    ).not.toBe(
-      generateIdempotencyKey({ date: '2026-08-18', mealType: 'lunch', items })
-    );
-  });
-
-  it('differs when mealType changes', () => {
-    expect(
-      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items })
-    ).not.toBe(
-      generateIdempotencyKey({ date: '2026-08-17', mealType: 'dinner', items })
-    );
-  });
-
-  it('differs when items change', () => {
-    const other = [{ dishId: 'c', name: '番茄蛋汤' }];
-    expect(
-      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items })
-    ).not.toBe(
-      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items: other })
-    );
-  });
-
-  it('differs when note changes', () => {
-    expect(
-      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items })
-    ).not.toBe(
-      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items, note: '少油' })
-    );
-  });
-
-  it('treats undefined note the same as empty string', () => {
-    expect(
-      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items })
-    ).toBe(
-      generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items, note: '' })
-    );
-  });
-
-  it('has a stable prefix so it does not collide with other resource keys', () => {
-    const key = generateIdempotencyKey({ date: '2026-08-17', mealType: 'lunch', items });
-    expect(key.startsWith('mp:')).toBe(true);
   });
 });

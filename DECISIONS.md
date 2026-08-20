@@ -124,3 +124,27 @@ MySQL。文档数据库索引和 `CLOUDBASE_APIKEY` 方案不再适用于本项�
 仅通过云托管私有网络通信，验证完成后关闭二者公网入口。
 
 > **注意**：通知消费者 `cloudfunctions/notify-admin` 仍使用 CloudBase 文档数据库，尚未迁移到 MySQL。`wechat_subscribe` 通道目前默认关闭（`SUBSCRIBE_ENABLED=false`），直到云函数完成迁移。
+
+---
+
+## M2-D009：项目收缩至「蔓蔓点菜 → 看板可见」单闭环
+
+- 日期：2026-08-20
+- 状态：CONFIRMED
+
+**背景：** 仓库累计约 10000 行 / 60+ 文件，唯一被产品要求的能力"管理员能看到蔓蔓点了什么"在原实现里从未落地（P1）。其上是睡眠/失效机器：通知任务队列、订阅配额、重试闸门、云函数、内部 token API（`SUBSCRIBE_ENABLED=false`，模板外部阻塞），以及乐观锁 + 幂等键 + 双列内省等技术债。维护成本高于价值。
+
+**决定：** 砍掉整条通知/订阅流水线、乐观锁、幂等键、限流、动态列内省。点菜看板（管理员按日期查看所有人点菜记录）成为产品的通知/回顾唯一形态，POST 即 upsert（`INSERT ... ON DUPLICATE KEY UPDATE`，确定性主键防双击重复）。
+
+**修正：**
+- M0-D002 被本决策取代：点菜修改走 last-write-wins，无 `version`，无 409 冲突；审计通过看板即时可见，不需要通知历史链。
+- M0-D005 被本决策取代：通知渠道删除，"提醒我"这一能力降级为"看板即提醒"。日后若需推送，做成提交时直发 `subscribeMessage.send` 的 ~20 行版本，不建队列、不建云函数。
+- D007 口径修正：`cloudEnvId` / `cloudServiceName` 是客户端可见部署标识，不是密钥；客户端代码可保留运行时注入，不属于"敏感信息不写入仓库"范畴。但 `.gitignore` 仍保留防御性覆盖以避免开发者误提交真实账号元数据。
+
+**后果：**
+- 服务端：5 路由 → 3 路由；`cloudbase.js` 738 → ~250 行；删 `routes/internal.js|quota.js|notifications.js`、`middleware/rateLimit.js`、`cloudfunctions/notify-admin/`、`server/openapi.yaml`。
+- 小程序：删订阅授权/配额/模板入口；`pages/admin/notifications/` 改造为点菜看板。
+- 文档：合并为 `README.md` + `DECISIONS.md`；删除 `DEVELOPMENT_PLAN.md|TASKS.md|TEST_PLAN.md|DEPLOYMENT_CHECKLIST.md|WORKFLOW-DEV.md|HANDOFF.md`。
+- 仓库目标 ≤3000 行业务代码（实际 ~2300）。
+
+**验收：** 详见 `REFORM_PLAN.md` §4 总验收。

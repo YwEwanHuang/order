@@ -10,66 +10,47 @@ import type {
   MealPlan,
   MealPlanSubmit,
   CurrentUser,
-  Notification,
-  QuotaInfo,
 } from '../domain/types';
 
 // ---------------------------------------------------------------------------
-// 配置（从 app.js 的 globalData 读取，运行时注入）
-// ---------------------------------------------------------------------------
-// 注意：env ID 和 service 名称是部署配置，不写入代码。
-// 真实值通过 getApp().globalData 在运行时获取。
-// 以下是类型定义，实际值不硬编码。
+// 配置（从 app.ts 的 globalData 读取，运行时注入）
+// envId / serviceName 由部署侧注入；客户端代码不含真实值。
 // ---------------------------------------------------------------------------
 
 interface ApiConfig {
   envId: string;
   serviceName: string;
-  baseUrl: string;
 }
-
-// ---------------------------------------------------------------------------
-// 请求封装
-// ---------------------------------------------------------------------------
 
 function getConfig(): ApiConfig {
   const app = getApp<IAppOption>();
   const globalData = app.globalData;
   return {
-    envId: globalData.cloudEnvId || 'prod-d8gkzjj6ub74bba3b',
-    serviceName: globalData.cloudServiceName || 'express-stvz',
-    baseUrl: globalData.cloudBaseUrl || 'https://express-stvz-298098-6-1318283518.sh.run.tcloudbase.com',
+    envId: globalData.cloudEnvId || '',
+    serviceName: globalData.cloudServiceName || '',
   };
 }
 
 /**
- * 通用的 callContainer 请求函数
+ * 通用 callContainer 请求函数
  */
 async function request<T>(
   path: string,
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
-  data?: unknown,
-  header: Record<string, string> = {}
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  data?: unknown
 ): Promise<T> {
   const config = getConfig();
-
-  const res = await wx.cloud.callContainer({
-    config: {
-      env: config.envId,
-    },
+  const res = (await wx.cloud.callContainer({
+    config: { env: config.envId },
     path,
     header: {
       'Content-Type': 'application/json',
       'X-WX-SERVICE': config.serviceName,
-      ...header,
     },
     method,
     data,
-  });
-
-  // callContainer 的返回值是 { data, statusCode, header, cookies }，
-  // data 字段才是后端真实返回的 body。
-  return (res as { data: T }).data;
+  })) as { data: T };
+  return res.data;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,107 +58,82 @@ async function request<T>(
 // ---------------------------------------------------------------------------
 
 export class ApiException extends Error {
-  constructor(
-    public code: string,
-    message: string,
-    public requestId?: string
-  ) {
+  constructor(public code: string, message: string, public requestId?: string) {
     super(message);
     this.name = 'ApiException';
   }
 }
 
-function handleResponse<T>(res: unknown): T {
-  const response = res as ApiResponse<T> | ApiError;
-  if ('error' in response) {
-    const err = response as ApiError;
-    throw new ApiException(
-      err.error.code,
-      err.error.message,
-      err.requestId
-    );
+function unwrap<T>(res: ApiResponse<T> | ApiError): T {
+  if ('error' in res) {
+    throw new ApiException(res.error.code, res.error.message, res.requestId);
   }
-  return (response as ApiResponse<T>).data;
+  return res.data;
 }
 
 // ---------------------------------------------------------------------------
-// API 方法
+// 用户 / 菜品
 // ---------------------------------------------------------------------------
 
-/** 获取当前用户角色 */
 export async function fetchCurrentUser(): Promise<CurrentUser> {
-  const data = await request<CurrentUser>('/api/v1/me', 'GET');
-  return handleResponse(data);
+  const data = await request<ApiResponse<CurrentUser>>('/api/v1/me', 'GET');
+  return unwrap(data);
 }
 
-/** 获取菜品列表（普通用户只看启用） */
 export async function fetchDishes(category?: string): Promise<Dish[]> {
   const query = category ? `?category=${category}` : '';
-  const data = await request<Dish[]>(`/api/v1/dishes${query}`, 'GET');
-  return handleResponse(data);
+  const data = await request<ApiResponse<Dish[]>>(`/api/v1/dishes${query}`, 'GET');
+  return unwrap(data);
 }
 
-/** 获取当前用户的点菜记录 */
+export async function submitMealPlan(body: MealPlanSubmit): Promise<MealPlan> {
+  const data = await request<ApiResponse<MealPlan>>('/api/v1/meal-plans', 'POST', body);
+  return unwrap(data);
+}
+
 export async function fetchMealPlans(from: string, to: string): Promise<MealPlan[]> {
-  const data = await request<MealPlan[]>(
+  const data = await request<ApiResponse<MealPlan[]>>(
     `/api/v1/meal-plans?from=${from}&to=${to}`,
     'GET'
   );
-  return handleResponse(data);
-}
-
-/** 提交新的点菜记录 */
-export async function submitMealPlan(
-  body: MealPlanSubmit,
-  idempotencyKey: string
-): Promise<MealPlan> {
-  const data = await request<MealPlan>('/api/v1/meal-plans', 'POST', body, {
-    'Idempotency-Key': idempotencyKey,
-  });
-  return handleResponse(data);
-}
-
-/** 修改已有点菜记录 */
-export async function updateMealPlan(
-  id: string,
-  body: MealPlanSubmit,
-  idempotencyKey: string
-): Promise<MealPlan> {
-  const data = await request<MealPlan>(`/api/v1/meal-plans/${id}`, 'PUT', body, {
-    'Idempotency-Key': idempotencyKey,
-  });
-  return handleResponse(data);
+  return unwrap(data);
 }
 
 // ---------------------------------------------------------------------------
-// 管理端 API（仅管理员可用）
+// 管理端 API
 // ---------------------------------------------------------------------------
 
-/** 按 ID 获取单个菜品 */
 export async function fetchDishById(id: string): Promise<Dish> {
-  const data = await request<Dish>(`/api/v1/admin/dishes/${id}`, 'GET');
-  return handleResponse(data);
+  const data = await request<ApiResponse<Dish>>(`/api/v1/admin/dishes/${id}`, 'GET');
+  return unwrap(data);
 }
 
-/** 获取所有菜品（含停用） */
 export async function fetchAdminDishes(): Promise<Dish[]> {
-  const data = await request<Dish[]>('/api/v1/admin/dishes', 'GET');
-  return handleResponse(data);
+  const data = await request<ApiResponse<Dish[]>>('/api/v1/admin/dishes', 'GET');
+  return unwrap(data);
 }
 
-/** 新增菜品 */
 export async function createDish(body: Omit<Dish, 'id'>): Promise<Dish> {
-  const data = await request<Dish>('/api/v1/admin/dishes', 'POST', body);
-  return handleResponse(data);
+  const data = await request<ApiResponse<Dish>>('/api/v1/admin/dishes', 'POST', body);
+  return unwrap(data);
 }
 
-/** 更新菜品 */
 export async function updateDish(id: string, body: Partial<Omit<Dish, 'id'>>): Promise<Dish> {
-  const data = await request<Dish>(`/api/v1/admin/dishes/${id}`, 'PATCH', body);
-  return handleResponse(data);
+  const data = await request<ApiResponse<Dish>>(`/api/v1/admin/dishes/${id}`, 'PATCH', body);
+  return unwrap(data);
 }
 
-/** 上传菜品图片，返回 fileID */
+/** 点菜看板：管理员视角按日期范围查看所有点菜记录 */
+export async function fetchAdminMealPlans(from?: string, to?: string): Promise<MealPlan[]> {
+  const parts: string[] = [];
+  if (from) parts.push(`from=${from}`);
+  if (to) parts.push(`to=${to}`);
+  const qs = parts.length ? `?${parts.join('&')}` : '';
+  const data = await request<ApiResponse<MealPlan[]>>(`/api/v1/admin/meal-plans${qs}`, 'GET');
+  return unwrap(data);
+}
+
+/** 上传菜品图片，返回 cloud:// fileID */
 export async function uploadDishImage(tempFilePath: string): Promise<string> {
   const config = getConfig();
   const uploadRes = await wx.cloud.uploadFile({
@@ -188,51 +144,14 @@ export async function uploadDishImage(tempFilePath: string): Promise<string> {
   return uploadRes.fileID;
 }
 
-/** 记录管理员订阅授权结果 */
-export async function recordSubscription(templateId: string, quota: number): Promise<void> {
-  await request('/api/v1/admin/subscriptions', 'POST', { templateId, remainingQuota: quota });
-}
-
-/** 获取管理员通知列表 */
-export async function fetchAdminNotifications(): Promise<Notification[]> {
-  const data = await request<Notification[]>('/api/v1/admin/notifications', 'GET');
-  return handleResponse(data);
-}
-
-/** 手动重试一条失败通知 */
-export async function retryNotification(id: string): Promise<Notification> {
-  const data = await request<Notification>(`/api/v1/admin/notifications/${id}/retry`, 'POST');
-  return handleResponse(data);
-}
-
 // ---------------------------------------------------------------------------
-// 用户配额与订阅状态
-// ---------------------------------------------------------------------------
-
-/** 查询当前用户的订阅配额（需登录） */
-export async function fetchQuota(): Promise<QuotaInfo> {
-  const data = await request<QuotaInfo>('/api/v1/quota', 'GET');
-  return handleResponse(data);
-}
-
-// ---------------------------------------------------------------------------
-// 工具
-// ---------------------------------------------------------------------------
-
-/** 生成幂等键（基于时间窗口，避免重复提交） */
-export function generateIdempotencyKey(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-// ---------------------------------------------------------------------------
-// 类型扩展（微信原有 getApp 类型）
+// 全局类型扩展（微信 getApp）
 // ---------------------------------------------------------------------------
 
 export interface IAppOption {
   globalData: {
     cloudEnvId?: string;
     cloudServiceName?: string;
-    cloudBaseUrl?: string;
     pendingSelection?: unknown;
     [key: string]: unknown;
   };

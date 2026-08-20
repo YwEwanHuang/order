@@ -25,102 +25,92 @@
   color: #E64340;
 }
 
-.notification-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16rpx;
+.range-bar {
+  padding: 0 8rpx 16rpx;
 }
 
-.notification-card {
+.range-text {
+  font-size: 26rpx;
+  color: #999999;
+}
+
+.day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.day-block {
   background: #FFFFFF;
   border-radius: 12rpx;
   padding: 24rpx;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
 }
 
-.notification-header {
+.day-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 24rpx;
-  color: #999999;
+  margin-bottom: 16rpx;
 }
 
-.notification-channel {
-  background: #F0F0F0;
-  padding: 4rpx 12rpx;
-  border-radius: 8rpx;
-}
-
-.notification-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-
-.notification-title {
+.day-date {
   font-size: 30rpx;
   color: #333333;
   font-weight: 500;
 }
 
-.notification-sub {
+.day-total {
+  font-size: 24rpx;
+  color: #999999;
+}
+
+.day-empty {
+  text-align: center;
+  color: #BBBBBB;
+  font-size: 24rpx;
+  padding: 16rpx 0;
+}
+
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.plan-card {
+  background: #F8F8F8;
+  border-radius: 8rpx;
+  padding: 16rpx;
+}
+
+.plan-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.plan-meal {
+  font-size: 26rpx;
+  color: #86C8A0;
+  font-weight: 500;
+}
+
+.plan-time {
   font-size: 22rpx;
   color: #BBBBBB;
   font-family: monospace;
 }
 
-.notification-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.plan-items {
+  font-size: 28rpx;
+  color: #333333;
+  line-height: 1.5;
 }
 
-.notification-status {
+.plan-note {
+  margin-top: 8rpx;
   font-size: 24rpx;
-  padding: 4rpx 12rpx;
-  border-radius: 12rpx;
-}
-
-.notification-status.sent {
-  background: #E8F8EE;
-  color: #1AAD19;
-}
-
-.notification-status.pending {
-  background: #FFF8E0;
-  color: #B58900;
-}
-
-.notification-status.no-quota {
-  background: #F0F0F0;
-  color: #666666;
-}
-
-.notification-status.rejected {
-  background: #F0F0F0;
   color: #999999;
-}
-
-.notification-status.failed {
-  background: #FFF0F0;
-  color: #E64340;
-}
-
-.retry-btn {
-  font-size: 24rpx;
-  padding: 0 20rpx;
-  height: 48rpx;
-  line-height: 48rpx;
-  background: #FFFFFF;
-  border: 1rpx solid #86C8A0;
-  color: #86C8A0;
-  border-radius: 24rpx;
-}
-
-.retry-btn::after {
-  border: none;
 }

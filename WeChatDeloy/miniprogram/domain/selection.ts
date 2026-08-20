@@ -148,7 +148,7 @@ export function validateNote(note: string | undefined | null): ValidationResult 
  */
 export function buildSubmitBody(
   state: SelectionState,
-  opts: { note?: string; version?: number } = {}
+  opts: { note?: string } = {}
 ): MealPlanSubmit {
   const body: MealPlanSubmit = {
     date: state.date,
@@ -161,9 +161,6 @@ export function buildSubmitBody(
   };
   if (typeof opts.note === 'string' && opts.note.length > 0) {
     body.note = opts.note;
-  }
-  if (typeof opts.version === 'number' && Number.isFinite(opts.version)) {
-    body.version = opts.version;
   }
   return body;
 }
@@ -180,32 +177,4 @@ export function shouldConfirmOnSwitch(
   if (next.date !== undefined && next.date !== state.date) return true;
   if (next.mealType !== undefined && next.mealType !== state.mealType) return true;
   return false;
-}
-
-/**
- * 生成幂等键（Idempotency-Key）。
- * 与后端契约对齐：相同 date/mealType/items/note → 相同 key。
- * - items 顺序无关（按 dishId 排序）
- * - 不含 openid（避免把 openid 落到日志或链路里）
- */
-export function generateIdempotencyKey(input: {
-  date: string;
-  mealType: MealType;
-  items: SelectedDish[];
-  note?: string;
-}): string {
-  const itemsKey = itemsFingerprint(input.items);
-  const noteKey = typeof input.note === 'string' ? input.note : '';
-  return `mp:${input.date}:${input.mealType}:${itemsKey}:${noteKey}`;
-}
-
-/**
- * items 的稳定指纹（与顺序无关）
- * 暴露给测试，不作为 API
- */
-export function itemsFingerprint(items: SelectedDish[]): string {
-  return [...items]
-    .sort((a, b) => (a.dishId < b.dishId ? -1 : a.dishId > b.dishId ? 1 : 0))
-    .map(i => `${i.dishId}@${i.name}`)
-    .join(',');
 }

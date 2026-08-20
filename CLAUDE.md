@@ -13,7 +13,7 @@ This project is configured for Claude Code development of a WeChat miniprogram. 
 Tooling that is wired up:
 
 - **wechat-devtools MCP** (in `.mcp.json`) — drives the WeChat developer tools: open project, compile, read console, navigate, screenshot, automate UI.
-- **cloudbase MCP** (in `.mcp.json`) — for CloudBase cloud functions / cloud run / DB questions.
+- **cloudbase MCP** (in `.mcp.json`) — for CloudBase Cloud Run / DB questions.
 - **wechat-devtools Skill** — MCP companion instructions.
 - **miniprogram-automation Skill** — `miniprogram-automator` based E2E scripts.
 - **miniprogram-ci Skill** — `pack-npm` / preview / upload scripts (never auto-upload to production).
@@ -24,15 +24,16 @@ Hard rule for every change: after editing, run the verification loop in
 
 ## Project Overview
 
-"蔓蔓点菜" (ManmanOrder) is a native TypeScript WeChat miniprogram with an Express API deployed to WeChat Cloud Run. The runtime storage decision in `DECISIONS.md` supersedes older document-database assumptions in `DEVELOPMENT_PLAN.md`.
+"蔓蔓点菜" (ManmanOrder) is a native TypeScript WeChat miniprogram with an Express API deployed to WeChat Cloud Run. Product scope = **点菜 → 看板可见**; see `DECISIONS.md` M2-D009 for the explicit cut.
 
 ## Key Files
 
-- `DEVELOPMENT_PLAN.md` — Full product/technical specification, data models, API contracts, and phased implementation plan (M0–M5). **Read this before making any significant changes.**
+- `README.md` — onboarding, API table, env vars, deployment.
+- `REFORM_PLAN.md` — execution baseline for the 2026-08-20 refactor; not a product spec.
+- `DECISIONS.md` — ADR log (M0–M2).
 - `WeChatDeloy/project.config.json` — Miniprogram project configuration (appid, compile settings).
 - `WeChatDeloy/miniprogram/app.ts` — Miniprogram entry and cloud initialization.
 - `WeChatDeloy/miniprogram/app.json` — Page registry and global window config.
-- `WeChatDeloy/cloudfunctions/quickstartFunctions/index.js` — Template cloud function; will be replaced with `notify-admin` and other business functions per the development plan.
 
 ## Tech Stack
 
@@ -43,28 +44,27 @@ Hard rule for every change: after editing, run the verification loop in
 ## Common Commands
 
 ```bash
-# WeChat developer tools - open project
-# Use the GUI to open WeChatDeloy/ as a miniprogram project
+# Backend tests
+cd server && npx jest
 
-# Deploy cloud functions (from WeChatDeloy/ directory)
-# Edit uploadCloudFunction.sh with correct envId and projectPath first
-bash uploadCloudFunction.sh
+# Miniprogram typecheck + domain unit tests
+cd WeChatDeloy/miniprogram && npx tsc --noEmit && npx vitest run
+
+# WeChat developer tools: open WeChatDeloy/ as a miniprogram project
 
 # CloudBase CLI (if installed)
-tcb fn deploy <functionName>   # deploy a cloud function
 tcb cloudrun deploy ...        # deploy containerized service
 ```
 
 ## Architecture Notes
 
-- Cloud functions run in a privileged context and receive `OPENID` via `cloud.getWXContext()` — never trust client-supplied openid values.
-- The API uses `wx.cloud.callContainer`; deployment identifiers are supplied by the existing runtime configuration/fallbacks.
-- The `cloudfunctions/quickstartFunctions/` directory holds template code; per `DEVELOPMENT_PLAN.md` it will be replaced with `notify-admin` and other domain-specific functions.
+- The API uses `wx.cloud.callContainer`; deployment identifiers (`cloudEnvId`, `cloudServiceName`) are runtime identifiers, not secrets, and live in `app.globalData` + `project.config.json`.
 - All business logic goes through `wx.cloud.callContainer` (private link) to the Express API.
 - The server reads `MYSQL_ADDRESS`, `MYSQL_USERNAME`, and `MYSQL_PASSWORD` only from Cloud Run. Never add database credentials to repository files.
+- `POST /api/v1/meal-plans` is an upsert by `(openid, date, mealType)` — last write wins, no version, no idempotency key.
 
 ## Security Notes
 
 - Never commit real AppIDs, secrets, environment IDs, or openids to the repository.
-- `.gitignore` should be created covering `node_modules/`, `.env*`, `project.private.config.json`, and local logs.
-- The `uploadCloudFunction.sh` script contains deployment commands — verify it doesn't contain hardcoded secrets before running.
+- `.gitignore` must cover `node_modules/`, `.env*`, `project.private.config.json`, and local logs.
+- Public ingress on Cloud Run must stay closed; `X-WX-OPENID` is only trustworthy when injected by the gateway.

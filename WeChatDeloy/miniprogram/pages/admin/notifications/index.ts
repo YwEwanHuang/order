@@ -1,13 +1,43 @@
 // pages/admin/notifications/index.ts
-import type { Notification, NotificationStatus } from '../../../domain/types';
-import { fetchAdminNotifications, retryNotification, ApiException } from '../../../services/api';
+// 点菜看板：管理员视角查看所有用户近 7 天的点菜记录
+import type { MealPlan } from '../../../domain/types';
+import { MEAL_TYPE_LABELS } from '../../../domain/types';
+import { fetchAdminMealPlans, ApiException } from '../../../services/api';
 
-interface NotificationView extends Notification {
-  statusLabel: string;
-  statusClass: string;
-  channelLabel: string;
-  dateLabel: string;
-  retryable: boolean;
+interface MealPlanView extends MealPlan {
+  mealTypeLabel: string;
+  itemsLabel: string;
+  timeLabel: string;
+}
+
+interface DayGroup {
+  date: string;
+  total: number;
+  plans: MealPlanView[];
+}
+
+function pad(n: number): string { return String(n).padStart(2, '0'); }
+
+function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function todayPlus(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return isoDate(d);
+}
+
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
 Page({
@@ -15,27 +45,35 @@ Page({
     loading: false,
     refreshing: false,
     error: '',
-    notifications: [] as NotificationView[],
+    rangeLabel: '',
+    groups: [] as DayGroup[],
   },
 
   onShow() {
-    this.loadNotifications();
+    this.loadBoard();
   },
 
   onPullDownRefresh() {
-    this.loadNotifications(true);
+    this.loadBoard(true);
   },
 
-  async loadNotifications(fromRefresh: boolean = false) {
+  async loadBoard(fromRefresh: boolean = false) {
     if (fromRefresh) {
       this.setData({ refreshing: true });
     } else {
       this.setData({ loading: true, error: '' });
     }
+    const from = todayPlus(0);
+    const to = todayPlus(6);
     try {
-      const list = await fetchAdminNotifications();
-      const decorated = list.map((n) => this.decorate(n));
-      this.setData({ notifications: decorated, loading: false, refreshing: false });
+      const list = await fetchAdminMealPlans(from, to);
+      const groups = groupByDate(list, from, to);
+      this.setData({
+        rangeLabel: `${formatDate(from)} - ${formatDate(to)}`,
+        groups,
+        loading: false,
+        refreshing: false,
+      });
     } catch (e) {
       const msg = e instanceof ApiException && e.code === 'FORBIDDEN'
         ? '无权限访问'
@@ -45,42 +83,27 @@ Page({
       (wx as any).stopPullDownRefresh();
     }
   },
-
-  decorate(n: Notification): NotificationView {
-    const statusMap: Record<NotificationStatus, { label: string; cls: string; retryable: boolean }> = {
-      pending:  { label: '待发送',     cls: 'pending',  retryable: false },
-      sent:     { label: '微信已送达', cls: 'sent',     retryable: false },
-      no_quota: { label: '无订阅额度', cls: 'no-quota', retryable: false },
-      rejected: { label: '已拒绝订阅', cls: 'rejected', retryable: false },
-      failed:   { label: '送达失败',   cls: 'failed',   retryable: true  },
-    };
-    const meta = statusMap[n.status];
-    return {
-      ...n,
-      statusLabel: meta.label,
-      statusClass: meta.cls,
-      retryable: meta.retryable,
-      channelLabel: n.channel === 'in_app' ? '站内' : '微信',
-      dateLabel: this.formatDate(n.createdAt),
-    };
-  },
-
-  formatDate(iso: string): string {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  },
-
-  async onRetryTap(e: any) {
-    const id = e.currentTarget.dataset.id as string;
-    try {
-      await retryNotification(id);
-      wx.showToast({ title: '已重新发送', icon: 'success' });
-      this.loadNotifications();
-    } catch (e) {
-      const msg = e instanceof ApiException ? e.message : '重试失败';
-      wx.showToast({ title: msg, icon: 'none' });
-    }
-  },
 });
+
+function groupByDate(list: MealPlan[], from: string, to: string): DayGroup[] {
+  const dayMap = new Map<string, MealPlan[]>();
+  const days: string[] = [];
+  for (let d = new Date(from); isoDate(d) <= to; d.setDate(d.getDate() + 1)) {
+    const k = isoDate(d);
+    days.push(k);
+    dayMap.set(k, []);
+  }
+  for (const plan of list) {
+    const bucket = dayMap.get(plan.date);
+    if (bucket) bucket.push(plan);
+  }
+  return days.map((date) => {
+    const plans = (dayMap.get(date) || []).map((p): MealPlanView => ({
+      ...p,
+      mealTypeLabel: MEAL_TYPE_LABELS[p.mealType] || p.mealType,
+      itemsLabel: (p.items || []).map((it) => it.name).join('、') || '（未选）',
+      timeLabel: formatTime(p.updatedAt),
+    }));
+    return { date, total: plans.length, plans };
+  });
+}

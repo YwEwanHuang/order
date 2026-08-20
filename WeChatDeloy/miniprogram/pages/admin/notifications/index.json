@@ -1,6 +1,6 @@
 {
   "usingComponents": {},
-  "navigationBarTitleText": "通知记录",
+  "navigationBarTitleText": "点菜看板",
   "enablePullDownRefresh": true,
   "backgroundTextStyle": "light"
 }

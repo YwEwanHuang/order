@@ -8,7 +8,6 @@ Page({
     loading: false,
     error: '',
     plans: [] as MealPlan[],
-    groupedPlans: {} as Record<string, MealPlan[]>,
   },
 
   onShow() {
@@ -18,7 +17,6 @@ Page({
   async loadPlans() {
     this.setData({ loading: true, error: '' });
     try {
-      // 查询最近 60 天的记录
       const to = new Date();
       const from = new Date();
       from.setDate(from.getDate() - 60);
@@ -26,21 +24,11 @@ Page({
       const toStr = to.toISOString().split('T')[0];
 
       const plans = await fetchMealPlans(fromStr, toStr);
-      const grouped = this.groupByDate(plans);
-      this.setData({ plans, groupedPlans: grouped, loading: false });
+      this.setData({ plans, loading: false });
     } catch (e: unknown) {
       const msg = e instanceof ApiException ? e.message : '加载失败';
       this.setData({ error: msg, loading: false });
     }
-  },
-
-  groupByDate(plans: MealPlan[]): Record<string, MealPlan[]> {
-    const grouped: Record<string, MealPlan[]> = {};
-    for (const plan of plans) {
-      if (!grouped[plan.date]) grouped[plan.date] = [];
-      grouped[plan.date].push(plan);
-    }
-    return grouped;
   },
 
   onModifyTap(e: any & { currentTarget: { dataset: { plan: MealPlan } } }) {
@@ -52,9 +40,8 @@ Page({
       items: plan.items,
       note: plan.note || undefined,
     };
-    wx.navigateTo({
-      url: `/pages/selection/confirm?planId=${plan.id}&version=${plan.version}`,
-    });
+    // POST /meal-plans 是 upsert，所以修改不需要单独传 id
+    wx.navigateTo({ url: '/pages/selection/confirm' });
   },
 
   getMealTypeLabel(mealType: string): string {

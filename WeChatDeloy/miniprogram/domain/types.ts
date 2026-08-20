@@ -3,26 +3,20 @@
  */
 export type MealType = 'breakfast' | 'lunch' | 'dinner';
 
-/** 餐次中文展示 */
 export const MEAL_TYPE_LABELS: Record<MealType, string> = {
   breakfast: '早餐',
   lunch: '午餐',
   dinner: '晚餐',
 };
 
-/** 餐次列表（有序） */
 export const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner'];
 
-/**
- * 餐次类型守卫：把未知字符串收敛到 MealType
- * 注意大小写敏感（与 API 契约保持一致）
- */
 export function isValidMealType(value: unknown): value is MealType {
   return value === 'breakfast' || value === 'lunch' || value === 'dinner';
 }
 
 /**
- * 菜品分类枚举
+ * 菜品分类
  */
 export type DishCategory = 'hot' | 'cold' | 'soup' | 'staple' | 'dessert';
 
@@ -44,9 +38,9 @@ export interface Dish {
   name: string;
   category: DishCategory;
   description?: string;
-  imageUrl?: string; // 占位图或云存储 URL
-  isActive: boolean; // 是否启用（启用后用户可见）
-  sortOrder: number; // 排序权重
+  imageUrl?: string; // cloud:// fileID
+  isActive: boolean;
+  sortOrder: number;
 }
 
 /**
@@ -59,14 +53,13 @@ export interface SelectedDish {
 }
 
 /**
- * 点菜提交/修改请求体
+ * 点菜提交请求体
  */
 export interface MealPlanSubmit {
-  date: string; // YYYY-MM-DD
+  date: string;       // YYYY-MM-DD
   mealType: MealType;
   items: SelectedDish[];
   note?: string;
-  version?: number; // 修改时传入，用于乐观锁
 }
 
 /**
@@ -78,22 +71,18 @@ export interface MealPlan {
   mealType: MealType;
   items: SelectedDish[];
   note?: string;
-  version: number;
   createdAt: string;
   updatedAt: string;
 }
 
 /**
- * API 统一响应
+ * API 统一响应 / 错误
  */
 export interface ApiResponse<T> {
   data: T;
   requestId: string;
 }
 
-/**
- * API 错误响应
- */
 export interface ApiError {
   error: {
     code: string;
@@ -108,46 +97,6 @@ export interface ApiError {
  */
 export type UserRole = 'user' | 'admin' | 'unknown';
 
-/**
- * 当前用户信息
- */
 export interface CurrentUser {
   role: UserRole;
-  /** 订阅消息模板 ID；空字符串表示后端未配置 */
-  subscribeTemplateId?: string;
-}
-
-/**
- * 通知渠道
- */
-export type NotificationChannel = 'in_app' | 'wechat_subscribe';
-
-/**
- * 通知状态
- */
-export type NotificationStatus = 'pending' | 'sent' | 'no_quota' | 'rejected' | 'failed';
-
-/**
- * 通知记录（管理员视图）
- */
-export interface Notification {
-  id: string;
-  mealPlanId: string;
-  mealPlanVersion: number;
-  channel: NotificationChannel;
-  status: NotificationStatus;
-  attemptCount: number;
-  lastErrorCode?: string | null;
-  createdAt: string;
-  sentAt?: string | null;
-}
-
-/**
- * 配额信息（GET /api/v1/quota 返回）
- */
-export interface QuotaInfo {
-  hasSubscription: boolean;
-  remainingQuota: number;
-  templateId: string;
-  acceptedAt: string | null;
 }
