@@ -1,51 +1,28 @@
+// server/src/index.js
 const express = require('express');
-const cors = require('cors');
-const { errorHandler } = require('./middleware/errorHandler');
-const { requestId } = require('./middleware/requestId');
-const { ensureSchema } = require('./db/cloudbase');
-const routes = require('./routes');
+const apiRouter = require('./routes');
+const openid = require('./middleware/openid');
+const { ensureSchema } = require('./db/pool');
 
 const app = express();
+app.use(express.json({ limit: '64kb' }));
+app.use(openid);
 
-app.use(cors());
-app.use(requestId);
-app.use(express.json({ limit: '1mb' }));
+app.get('/health', (_req, res) => res.json({ ok: true }));
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.use('/api/v1', apiRouter);
+
+app.use((err, _req, res, _next) => {
+  console.error('[error]', err);
+  res.status(500).json({ error: 'internal_error' });
 });
 
-app.use('/api/v1', routes);
-
-app.use(errorHandler);
-
-const PORT = process.env.PORT || 80;
-
-async function start() {
-  await ensureSchema();
-  return app.listen(PORT, () => {
-    console.log(`蔓蔓点菜 API 运行中，端口 ${PORT}`);
-  });
-}
-
-if (require.main === module) {
-  start().catch((err) => {
-    console.error('[Startup] 数据库初始化失败', {
-      errName: err?.name,
-      errCode: err?.code,
-      missingVars: collectMissingVars(),
-    });
+const port = Number(process.env.PORT) || 80;
+ensureSchema()
+  .then(() => {
+    app.listen(port, () => console.log(`[server] listening on ${port}`));
+  })
+  .catch((err) => {
+    console.error('[fatal] ensureSchema failed', err);
     process.exit(1);
   });
-}
-
-function collectMissingVars() {
-  const missing = [];
-  if (!process.env.MYSQL_ADDRESS) missing.push('MYSQL_ADDRESS');
-  if (!process.env.MYSQL_USERNAME) missing.push('MYSQL_USERNAME');
-  if (!process.env.MYSQL_PASSWORD) missing.push('MYSQL_PASSWORD');
-  return missing;
-}
-
-module.exports = app;
-module.exports.start = start;
