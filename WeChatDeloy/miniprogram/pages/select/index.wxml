@@ -1,0 +1,35 @@
+<view class="select">
+  <view class="title">{{titleLabel}}</view>
+
+  <block wx:if="{{loading}}">
+    <view class="state">加载中…</view>
+  </block>
+
+  <block wx:else>
+    <view class="group" wx:for="{{categories}}" wx:for-item="category" wx:key="key">
+      <view class="group-title">{{category.label}}</view>
+      <view class="grid">
+        <view
+          wx:for="{{category.dishes}}"
+          wx:key="id"
+          class="pill {{selectedMap[item.id] ? 'selected' : ''}}"
+          bindtap="toggleDish"
+          data-id="{{item.id}}"
+        >{{item.name}}</view>
+      </view>
+    </view>
+
+    <view class="note-row">
+      <textarea
+        placeholder="备注（选填，≤200 字）"
+        maxlength="200"
+        value="{{note}}"
+        bindinput="onNoteInput"
+      />
+      <view class="counter">{{note.length}}/200</view>
+    </view>
+
+    <button class="primary" bindtap="save" disabled="{{selectedIds.length === 0 || saving}}">保存</button>
+    <view class="error" wx:if="{{error}}">{{error}}</view>
+  </block>
+</view>
