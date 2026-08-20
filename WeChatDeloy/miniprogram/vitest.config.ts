@@ -8,6 +8,8 @@ export default defineConfig({
   test: {
     include: ['domain/**/*.test.ts'],
     environment: 'node',
+    // 排除 tsc 编译产物 .js，避免 package.json type:module 把 CJS 当 ESM 解析
+    exclude: ['**/*.js'],
   },
   // 把 .ts 放在 .js 之前，避免 vitest 在 domain 同时存在 .ts 源和
   // tsc 编译产物 .js 时优先解析 .js（CJS+package.json type:module 会报错）
