@@ -150,7 +150,7 @@ cloudfunctions/  →  整目录删除
 | `dish_ids` | JSON NOT NULL | 数组，元素为 `dishes.id`；选菜至少 1 道、至多 20 道 |
 | `note` | VARCHAR(200) NULL | |
 | `updated_at` | TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | |
-| `updated_by` | VARCHAR(64) NULL | `X-WX-OPENID`；首页显示为"由 XXXX 编辑于 HH:MM" |
+| `updated_by` | VARCHAR(64) NULL | `X-WX-OPENID`；首页显示为"由 oABCD…wXYZ 编辑于 HH:MM"（openid 首尾各 4 字符，中间省略；不含隐私） |
 
 - **无 `meal_type` 列**（永远只 dinner；要扩展时再 ALTER 加枚举列，不预先埋）。
 - **无 `version`、`idempotency_key`、`status` 列**（PUT 即 upsert，冲突 = 覆盖）。
@@ -187,7 +187,7 @@ cloudfunctions/  →  整目录删除
 |---|---|---|
 | loading | 首屏未返回数据 | 全屏 loading 占位 |
 | empty | 该日期无 `meal_plans` 行 | 标题 "今晚还没选" + 主按钮「选晚餐」 |
-| success | 该日期有 `meal_plans` 行 | 菜名列表（按 `dishes.sort_order`）+ 备注 + "由 XXXX 编辑于 HH:MM" + 「改一下」按钮 |
+| success | 该日期有 `meal_plans` 行 | 菜名列表（按 `dishes.sort_order`）+ 备注 + "由 oABCD…wXYZ 编辑于 HH:MM" + 「改一下」按钮 |
 | error | API 失败 | toast + 重试按钮（保留 30 秒前的最后成功数据） |
 
 ### 4.4 选菜子页状态
