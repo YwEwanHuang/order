@@ -9,23 +9,20 @@ ManmanOrder/
 │   ├── project.private.config.json ← gitignored; appid, "condition"
 │   ├── miniprogram/            ← TS source compiled in-place to .js
 │   │   ├── app.ts              ← entry; wx.cloud.init + globalData
-│   │   ├── app.json            ← pages registry, tabBar, window
+│   │   ├── app.json            ← pages registry (no tabBar), window
 │   │   ├── app.wxss
-│   │   ├── pages/              ← menu, selection, meal-plans, profile, admin/*
+│   │   ├── pages/              ← home, select, dishes (no tabBar)
 │   │   ├── components/         ← reusable UI
 │   │   ├── services/api.ts     ← the ONLY callContainer wrapper
 │   │   ├── domain/             ← plain TS types, guards, pure helpers
 │   │   ├── typings/            ← ambient .d.ts (e.g. wx-app types)
 │   │   └── images/             ← tab icons, placeholders
-│   └── cloudfunctions/
-│       ├── notify-admin/       ← canonical notify job processor (wx-server-sdk)
-│       └── quickstartFunctions/ ← template; ignore / delete per dev plan
 ├── server/                     ← Express API (Cloud Run)
 │   └── src/
 │       ├── index.js            ← boot, ensureSchema, mount /api/v1
-│       ├── db/cloudbase.js     ← file kept; impl is mysql2 + idempotent schema
-│       ├── middleware/
-│       └── routes/             ← dishes / mealPlans / admin
+│       ├── db/pool.js          ← mysql2 pool + ensureSchema + seed
+│       ├── middleware/         ← openid (no auth check), errorHandler, requestId
+│       └── routes/             ← dishes / mealPlans
 ├── .mcp.json                   ← wechat-devtools + cloudbase MCPs
 ├── .claude/skills/wechat-miniprogram-dev/  ← THIS skill
 ├── CLAUDE.md                   ← stable project facts only
