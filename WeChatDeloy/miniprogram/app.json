@@ -1,12 +1,8 @@
 {
   "pages": [
-    "pages/menu/index",
-    "pages/selection/confirm",
-    "pages/meal-plans/index",
-    "pages/profile/index",
-    "pages/admin/dishes/index",
-    "pages/admin/dish-edit/index",
-    "pages/admin/notifications/index"
+    "pages/home/index",
+    "pages/select/index",
+    "pages/dishes/index"
   ],
   "window": {
     "backgroundColor": "#F6F6F6",
@@ -17,31 +13,5 @@
   },
   "sitemapLocation": "sitemap.json",
   "style": "v2",
-  "lazyCodeLoading": "requiredComponents",
-  "tabBar": {
-    "color": "#999999",
-    "selectedColor": "#86C8A0",
-    "backgroundColor": "#FFFFFF",
-    "borderStyle": "white",
-    "list": [
-      {
-        "pagePath": "pages/menu/index",
-        "text": "点菜",
-        "iconPath": "images/icons/home.png",
-        "selectedIconPath": "images/icons/home-active.png"
-      },
-      {
-        "pagePath": "pages/meal-plans/index",
-        "text": "记录",
-        "iconPath": "images/icons/business.png",
-        "selectedIconPath": "images/icons/business-active.png"
-      },
-      {
-        "pagePath": "pages/profile/index",
-        "text": "我的",
-        "iconPath": "images/icons/usercenter.png",
-        "selectedIconPath": "images/icons/usercenter-active.png"
-      }
-    ]
-  }
+  "lazyCodeLoading": "requiredComponents"
 }
