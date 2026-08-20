@@ -4,7 +4,7 @@ const { requireAuth } = require('../middleware/auth');
 
 router.get('/me', requireAuth, (req, res) => {
   res.json({
-    data: { role: req.user.role },
+    data: { role: req.user.role, openid: req.user.openid },
     requestId: req.requestId,
   });
 });
