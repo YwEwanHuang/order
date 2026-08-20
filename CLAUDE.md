@@ -29,8 +29,8 @@ Hard rule for every change: after editing, run the verification loop in
 ## Key Files
 
 - `README.md` — onboarding, API table, env vars, deployment.
-- `REFORM_PLAN.md` — execution baseline for the 2026-08-20 refactor; not a product spec.
-- `DECISIONS.md` — ADR log (M0–M2).
+- `docs/superpowers/specs/2026-08-20-manmanorder-single-loop-design.md` — product spec for the single-loop refactor.
+- `DECISIONS.md` — ADR log (M0–M3).
 - `WeChatDeloy/project.config.json` — Miniprogram project configuration (appid, compile settings).
 - `WeChatDeloy/miniprogram/app.ts` — Miniprogram entry and cloud initialization.
 - `WeChatDeloy/miniprogram/app.json` — Page registry and global window config.
@@ -52,8 +52,9 @@ cd WeChatDeloy/miniprogram && npx tsc --noEmit && npx vitest run
 
 # WeChat developer tools: open WeChatDeloy/ as a miniprogram project
 
-# CloudBase CLI (if installed)
-tcb cloudrun deploy ...        # deploy containerized service
+# Deploy: ONLY via git push to origin/main. WeChat Cloud Run auto-pulls and builds.
+# Do NOT use `wxcloud run:deploy` — manual upload bypasses the GitHub deploy chain
+# and risks drifting from main. If you need a one-off, use the Cloud Run web console.
 ```
 
 ## Architecture Notes
