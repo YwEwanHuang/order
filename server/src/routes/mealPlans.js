@@ -1,60 +1,104 @@
+// server/src/routes/mealPlans.js
 const express = require('express');
-const router = express.Router();
-const { requireAuth } = require('../middleware/auth');
-const {
-  getMealPlansByUser,
-  upsertMealPlan,
-} = require('../db/cloudbase');
+const { pool } = require('../db/pool');
 
-function toPublicDto(plan) {
-  if (!plan) return plan;
-  const { ownerOpenid, ...pub } = plan;
-  return pub;
+const router = express.Router();
+
+const MAX_NOTE = 200;
+const MAX_DISHES = 20;
+const MAX_FUTURE_DAYS = 6;
+
+function todayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
-// GET /api/v1/meal-plans?from&to — 自己的点菜记录
-router.get('/', requireAuth, async (req, res, next) => {
+function shiftISO(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function dateInRange(dateStr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const today = todayISO();
+  const max = shiftISO(MAX_FUTURE_DAYS);
+  return dateStr >= today && dateStr <= max;
+}
+
+async function allDishIdsExist(ids) {
+  if (ids.length === 0) return false;
+  const [rows] = await pool.query(
+    `SELECT id FROM dishes WHERE id IN (${ids.map(() => '?').join(',')})`,
+    ids
+  );
+  return rows.length === ids.length;
+}
+
+router.get('/', async (req, res, next) => {
   try {
-    const { from, to } = req.query;
-    const plans = await getMealPlansByUser(req.user.openid, { from, to });
-    res.json({ data: plans.map(toPublicDto), requestId: req.requestId });
+    const { date } = req.query;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'invalid_date' });
+    }
+    const [rows] = await pool.query(
+      `SELECT date, dish_ids, note, updated_at, updated_by
+       FROM meal_plans WHERE date = ?`,
+      [date]
+    );
+    if (rows.length === 0) return res.json(null);
+    const row = rows[0];
+    row.dish_ids = typeof row.dish_ids === 'string' ? JSON.parse(row.dish_ids) : row.dish_ids;
+    res.json(row);
   } catch (err) {
     next(err);
   }
 });
 
-// POST /api/v1/meal-plans — upsert；同一 openid+date+mealType 重复提交 = last-write-wins
-router.post('/', requireAuth, async (req, res, next) => {
+router.put('/', async (req, res, next) => {
   try {
-    const { date, mealType, items, note } = req.body;
+    const { date, dish_ids, note } = req.body || {};
 
-    if (!date || !mealType || !Array.isArray(items)) {
-      return res.status(400).json({
-        error: { code: 'VALIDATION_ERROR', message: '缺少必填字段' },
-        requestId: req.requestId,
-      });
+    if (!dateInRange(date)) {
+      return res.status(400).json({ error: 'date_out_of_range' });
     }
-    if (items.length === 0) {
-      return res.status(400).json({
-        error: { code: 'VALIDATION_ERROR', message: '至少选择一道菜' },
-        requestId: req.requestId,
-      });
+    if (!Array.isArray(dish_ids) || dish_ids.length === 0 || dish_ids.length > MAX_DISHES) {
+      return res.status(400).json({ error: 'invalid_dish_count' });
     }
-    if (items.length > 20) {
-      return res.status(400).json({
-        error: { code: 'VALIDATION_ERROR', message: '最多选择20道菜' },
-        requestId: req.requestId,
-      });
+    if (!dish_ids.every((x) => Number.isInteger(x) && x > 0)) {
+      return res.status(400).json({ error: 'invalid_dish_id' });
     }
-    if (typeof note === 'string' && note.length > 100) {
-      return res.status(400).json({
-        error: { code: 'VALIDATION_ERROR', message: '备注不超过100字' },
-        requestId: req.requestId,
-      });
+    if (!(await allDishIdsExist(dish_ids))) {
+      return res.status(400).json({ error: 'invalid_dish_id' });
     }
+    if (typeof note === 'string' && note.length > MAX_NOTE) {
+      return res.status(400).json({ error: 'note_too_long' });
+    }
+    const openid = req.openid || null;
 
-    const plan = await upsertMealPlan(req.user.openid, date, mealType, items, note || '');
-    res.status(201).json({ data: toPublicDto(plan), requestId: req.requestId });
+    await pool.query(
+      `INSERT INTO meal_plans (date, dish_ids, note, updated_by)
+       VALUES (?, CAST(? AS JSON), ?, ?)
+       ON DUPLICATE KEY UPDATE
+         dish_ids = VALUES(dish_ids),
+         note = VALUES(note),
+         updated_by = VALUES(updated_by)`,
+      [date, JSON.stringify(dish_ids), note || null, openid]
+    );
+
+    const [rows] = await pool.query(
+      'SELECT date, dish_ids, note, updated_at, updated_by FROM meal_plans WHERE date = ?',
+      [date]
+    );
+    const row = rows[0];
+    row.dish_ids = typeof row.dish_ids === 'string' ? JSON.parse(row.dish_ids) : row.dish_ids;
+    res.json(row);
   } catch (err) {
     next(err);
   }
