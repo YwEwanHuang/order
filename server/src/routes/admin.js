@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { writeLimiter } = require('../middleware/rateLimit');
 
 // 所有管理接口先要求已登录，再要求是管理员
 router.use(requireAuth);
@@ -19,6 +20,9 @@ const {
 
 // 所有管理接口需管理员权限
 router.use(requireAdmin);
+
+// 管理端写操作同样受全局限流控制
+router.use(writeLimiter);
 
 // ---------------------------------------------------------------------------
 // 菜品管理

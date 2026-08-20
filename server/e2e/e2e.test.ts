@@ -14,34 +14,54 @@
  * 因此 E2E 测试以 UI 行为验证为主（选择器存在、导航正确、状态切换）。
  */
 
-import { spawnSync } from 'child_process';
+import { spawn } from 'child_process';
 import automator, { MiniProgram, Page } from 'miniprogram-automator';
 
 const CLI_PATH = '/Applications/wechatwebdevtools.app/Contents/MacOS/cli';
 const PROJECT_PATH =
   process.env.MINIPROGRAM_PROJECT_PATH ||
   '/Users/yiwei/Library/CloudStorage/OneDrive-个人/Project/ManmanOrder/WeChatDeloy';
-const AUTO_PORT = Number(process.env.WECHAT_AUTO_PORT || 9420);
+const AUTO_PORT = Number(process.env.WECHAT_AUTO_PORT || 25039);
 
 let miniProgram: MiniProgram;
+let cliProc: ReturnType<typeof spawn>;
+
+/** 同步等待函数（用于 beforeAll setup，不影响测试体） */
+function wait(ms: number) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) { /* spin */ }
+}
 
 beforeAll(async () => {
-  const { success, output } = spawnSync(
-    CLI_PATH,
-    ['auto', '--project', PROJECT_PATH, '--auto-port', String(AUTO_PORT)],
-    { encoding: 'utf8', timeout: 20000 }
-  );
-  if (!success) throw new Error(`CLI auto 失败:\n${output}`);
+  // 用后台 spawn 启动 CLI，避免等待 CLI 退出（GUI app 会 fork 即退出）
+  cliProc = spawn(CLI_PATH, ['auto', '--project', PROJECT_PATH, '--auto-port', String(AUTO_PORT)], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let output = '';
+  cliProc.stdout?.on('data', (d) => { output += d; });
+  cliProc.stderr?.on('data', (d) => { output += d; });
+
+  // 等 IDE 的 WebSocket 服务就绪（后台启动后等待 3 秒）
+  wait(3000);
+
+  // 验证 CLI 确实启动了自动化端口（输出包含 "auto"）
+  if (!output.toLowerCase().includes('auto')) {
+    throw new Error(`CLI auto 启动异常:\n${output}`);
+  }
 
   miniProgram = await automator.connect({
     wsEndpoint: `ws://127.0.0.1:${AUTO_PORT}`,
   });
-}, 30000);
+}, 40000);
 
 afterAll(async () => {
   if (miniProgram) {
     await miniProgram.restoreWxMethod('request').catch(() => {});
     await miniProgram.close().catch(() => {});
+  }
+  if (cliProc) {
+    cliProc.kill();
   }
 });
 

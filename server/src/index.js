@@ -3,6 +3,7 @@ const cors = require('cors');
 const { errorHandler } = require('./middleware/errorHandler');
 const { requestId } = require('./middleware/requestId');
 const { ensureSchema } = require('./db/cloudbase');
+const { writeLimiter } = require('./middleware/rateLimit');
 const routes = require('./routes');
 
 const app = express();
@@ -11,6 +12,11 @@ const app = express();
 app.use(cors());
 app.use(requestId);
 app.use(express.json({ limit: '1mb' }));
+
+// 限流：按 openid 区分，每人每 60 秒最多 30 次写操作
+// 对菜品和菜谱的写操作启用限流
+app.use('/api/v1/dishes', writeLimiter);
+app.use('/api/v1/meal-plans', writeLimiter);
 
 // 健康检查
 app.get('/health', (req, res) => {
