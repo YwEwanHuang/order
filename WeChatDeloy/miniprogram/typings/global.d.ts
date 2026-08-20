@@ -32,11 +32,30 @@ interface IAppOptions {
   [key: string]: unknown;
 }
 
-// 重载：Page 接受 IPageOptions，this 上下文由接口本身保证
-declare function Page(options: IPageOptions): void;
+// 重载：Page 接受 IPageOptions（带泛型便于 data/this 类型推导），this 上下文由接口本身保证
+declare function Page<TData = Record<string, unknown>, TCustom = Record<string, unknown>>(
+  options: IPageOptions & ThisType<IPageInstance & TCustom & { data: TData }>
+): void;
 
 // 重载：App 接受 IAppOptions
 declare function App(options: IAppOptions): void;
+
+// 微信小程序事件类型命名空间（运行时由 WechatMiniprogram 提供；这里只声明 spec 用到的子集）
+declare namespace WechatMiniprogram {
+  interface BaseEvent {
+    currentTarget: { dataset: Record<string, unknown> };
+    target: { dataset: Record<string, unknown> };
+  }
+  interface CustomEvent<T = unknown> {
+    detail: T;
+    currentTarget: { dataset: Record<string, unknown> };
+    target: { dataset: Record<string, unknown> };
+  }
+  type PickerChange = CustomEvent<{ value: string }>;
+  type Input = CustomEvent<{ value: string }>;
+  type TextareaInput = CustomEvent<{ value: string }>;
+  type SwitchChange = CustomEvent<{ value: boolean }>;
+}
 
 declare function Component<T = object>(options: T): void;
 declare function getApp<T = Record<string, unknown>>(): T;
