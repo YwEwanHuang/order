@@ -148,3 +148,49 @@ MySQL。文档数据库索引和 `CLOUDBASE_APIKEY` 方案不再适用于本项�
 - 仓库目标 ≤3000 行业务代码（实际 ~2300）。
 
 **验收：** 详见 `REFORM_PLAN.md` §4 总验收。
+
+---
+
+## M2-D010：callContainer 端到端真机验证通过
+
+- 日期：2026-08-20
+- 状态：CONFIRMED
+
+**背景：** M2-D009 收缩后，前两次真机验证分别在 `app.ts` 缺失部署标识（`cloudEnvId` / `cloudServiceName` 为空字符串）与 `project.config.json` `useCompilerModule: true` 但缺 TS 编译插件（导致 `domain/date.js` 未生成）两处栽倒。两次修复后再次在模拟器验证。
+
+**验证证据（点菜页 → 云托管 → MySQL → 返回 → 渲染）：**
+- 模拟器 / 端：`pages/menu/index` 渲染 3 道菜（鸡蛋西红柿 / 土豆炖豆角 / 清炒生菜）
+- 调试器 AppData：`dishes` 数组长度 3，每条 `id` / `name` / `isActive` / `category` / `sortOrder` 字段对齐
+- 调试器 Console：无 `[menu] loadDishes failed` 异常
+- Network XHR 列表为空 — 预期行为，`callContainer` 走微信内部私有通道，不会出现在 Network XHR 面板
+
+**决定：** 端到端链路（小程序 → 云托管 → MySQL）验证通过。Network XHR 不可作为 callContainer 验证手段，AppData 中 `dishes` 实际填充是唯一可信证据。
+
+**后果：**
+- 真机 / 模拟器后续验证统一以"AppData 数据填充 + Console 无失败日志"为准，不依赖 Network XHR
+- DevTools 模拟器已足以完成端到端数据链路验证，物理真机双账号 E2E 单独走
+
+---
+
+## M3-D011：单闭环重构（删 admin / 改 dinner-only / 改 7 天）
+
+- 日期：2026-08-20
+- 状态：CONFIRMED
+- Spec：`docs/superpowers/specs/2026-08-20-manmanorder-single-loop-design.md`
+- Plan：`docs/superpowers/plans/2026-08-20-manmanorder-single-loop.md`
+
+**背景：** 用户实际需求为"2 人家庭晚餐"——一个人选菜，另一个人看。M2-D009 的范围仍过大（保留 admin/三餐/30 天），与需求不匹配。
+
+**决定：**
+- 餐次：仅保留 dinner；`meal_plans` 表删 `meal_type` 列。
+- 日期范围：`[today, today+6]`（从 30 天缩到 7 天）。
+- 鉴权：删除 `ADMIN_OPENIDS` / `requireAdmin`；任何 openid 可看可改可管理菜品。
+- 上传方式：`PUT /api/v1/meal-plans` 取代 `POST`，语义即"覆盖"。
+- 菜品：固定 10 道种子 + 任何人可增删改启停（无 admin 概念）。
+
+**后果：**
+- 服务端：3 路由组（dishes / meal-plans / health），`src/` ≤ 600 行。
+- 小程序：3 页（home / select / dishes），无 tabBar，无 admin。
+- 删除文件：cloudfunctions/、routes/{admin,internal,quota,notifications}.js、middleware/rateLimit.js、db/cloudbase.js、openapi.yaml、pages/{admin,profile,meal-plans,selection,menu}、多个 *.md 文档。
+
+**验收：** Spec §9 不变量 1-8。
