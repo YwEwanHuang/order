@@ -1,4 +1,16 @@
 /**
+ * domain/types.ts
+ *
+ * 本文件目前只保留 selection.ts / pages/*.js 仍在使用的"旧 UI-shape"类型
+ * （MealType / DishCategory / 旧 Dish / SelectedDish / MealPlanSubmit）。
+ *
+ * 新 API 层类型（Dish / MealPlan / ApiException）已内联在 services/api.ts。
+ *
+ * 计划：
+ * - Phase 8 替换 pages/*.js 并删除 selection.ts 时一并清空本文件。
+ */
+
+/**
  * 餐次枚举
  */
 export type MealType = 'breakfast' | 'lunch' | 'dinner';
@@ -31,7 +43,8 @@ export const DISH_CATEGORY_LABELS: Record<DishCategory, string> = {
 export const DISH_CATEGORIES: DishCategory[] = ['hot', 'cold', 'soup', 'staple', 'dessert'];
 
 /**
- * 菜品
+ * 菜品（旧 UI-shape，selection.ts / pages/*.js 仍在用；
+ * Phase 8 替换 pages 时一并清理；不要在新代码里使用）
  */
 export interface Dish {
   id: string;
@@ -44,7 +57,7 @@ export interface Dish {
 }
 
 /**
- * 选择篮中的单项
+ * 选择篮中的单项（仅 selection.ts 内部使用）
  */
 export interface SelectedDish {
   dishId: string;
@@ -53,50 +66,11 @@ export interface SelectedDish {
 }
 
 /**
- * 点菜提交请求体
+ * 点菜提交请求体（旧 POST /api/v1/meal-plans body；新 API 用 PUT + dish_ids）
  */
 export interface MealPlanSubmit {
   date: string;       // YYYY-MM-DD
   mealType: MealType;
   items: SelectedDish[];
   note?: string;
-}
-
-/**
- * 点菜记录（查询返回）
- */
-export interface MealPlan {
-  id: string;
-  date: string;
-  mealType: MealType;
-  items: SelectedDish[];
-  note?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * API 统一响应 / 错误
- */
-export interface ApiResponse<T> {
-  data: T;
-  requestId: string;
-}
-
-export interface ApiError {
-  error: {
-    code: string;
-    message: string;
-    fields?: Record<string, string>;
-  };
-  requestId: string;
-}
-
-/**
- * 当前用户角色
- */
-export type UserRole = 'user' | 'admin' | 'unknown';
-
-export interface CurrentUser {
-  role: UserRole;
 }
