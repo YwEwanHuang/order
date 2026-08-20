@@ -29,9 +29,8 @@ ManmanOrder/
 ├── .mcp.json                   ← wechat-devtools + cloudbase MCPs
 ├── .claude/skills/wechat-miniprogram-dev/  ← THIS skill
 ├── CLAUDE.md                   ← stable project facts only
-├── DECISIONS.md                ← ADRs (M0/M1/M2)
+├── DECISIONS.md                ← ADRs (M0–M3)
 ├── README.md                   ← onboarding + API table
-├── REFORM_PLAN.md              ← 2026-08-20 refactor baseline
 └── Dockerfile                  ← Cloud Run build
 ```
 
