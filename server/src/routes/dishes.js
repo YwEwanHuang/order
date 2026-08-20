@@ -1,141 +1,98 @@
-/**
- * Strip internal ownership field from dish DTOs sent to clients.
- * createdBy is kept in the database for server-side authorization only.
- */
-function toPublicDto(dish) {
-  if (!dish) return dish;
-  // eslint-disable-next-line no-unused-vars
-  const { createdBy, ...pub } = dish;
-  return pub;
+// server/src/routes/dishes.js
+const express = require('express');
+const { pool } = require('../db/pool');
+
+const router = express.Router();
+
+const VALID_CATEGORIES = ['hot', 'cold', 'soup', 'staple'];
+
+function parseId(raw) {
+  const id = Number(raw);
+  return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-const express = require('express');
-const router = express.Router();
-const { requireAuth } = require('../middleware/auth');
-const {
-  getActiveDishes,
-  getAllDishes,
-  getDishById,
-  createDish,
-  updateDish,
-  deleteDish,
-} = require('../db/cloudbase');
-
-/**
- * GET /api/v1/dishes
- * 公开列表（只返回 is_active=1 的菜品）
- */
 router.get('/', async (req, res, next) => {
   try {
-    const { category } = req.query;
-    const dishes = await getActiveDishes({ category });
-    res.json({ data: dishes.map(toPublicDto) });
+    const includeInactive = req.query.includeInactive === 'true';
+    const sql = includeInactive
+      ? 'SELECT id, name, category, is_active, sort_order, created_at FROM dishes ORDER BY is_active DESC, sort_order ASC, id ASC'
+      : 'SELECT id, name, category, is_active, sort_order, created_at FROM dishes WHERE is_active = 1 ORDER BY sort_order ASC, id ASC';
+    const [rows] = await pool.query(sql);
+    res.json(rows);
   } catch (err) {
     next(err);
   }
 });
 
-/**
- * GET /api/v1/dishes/:id
- * 公开单条（允许查非活跃，方便 admin 操作）
- */
-router.get('/:id', async (req, res, next) => {
+router.post('/', async (req, res, next) => {
   try {
-    const dish = await getDishById(req.params.id);
-    if (!dish) {
-      return res.status(404).json({ error: { code: 'NOT_FOUND', message: '菜品不存在' } });
+    const { name, category } = req.body || {};
+    if (typeof name !== 'string' || name.length === 0 || name.length > 64) {
+      return res.status(400).json({ error: 'invalid_name' });
     }
-    res.json({ data: toPublicDto(dish) });
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * POST /api/v1/dishes
- * 创建菜品（需要认证，创建者 = 当前用户 openid）
- */
-router.post('/', requireAuth, async (req, res, next) => {
-  try {
-    const { name, category, description, imageUrl, isActive, sortOrder } = req.body;
-
-    if (!name || !category) {
-      return res.status(400).json({
-        error: { code: 'VALIDATION_ERROR', message: 'name 和 category 为必填字段' },
-      });
-    }
-
-    const VALID_CATEGORIES = ['hot', 'cold', 'soup', 'staple', 'drink', 'other'];
     if (!VALID_CATEGORIES.includes(category)) {
-      return res.status(400).json({
-        error: { code: 'VALIDATION_ERROR', message: `category 必须是 ${VALID_CATEGORIES.join('/')} 之一` },
-      });
+      return res.status(400).json({ error: 'invalid_category' });
     }
-
-    const dish = await createDish({
-      name,
-      category,
-      description,
-      imageUrl,
-      isActive,
-      sortOrder,
-      createdBy: req.user.openid,
-    });
-
-    res.status(201).json({ data: toPublicDto(dish) });
+    const [result] = await pool.query(
+      'INSERT INTO dishes (name, category) VALUES (?, ?)',
+      [name, category]
+    );
+    const [rows] = await pool.query('SELECT * FROM dishes WHERE id = ?', [result.insertId]);
+    res.status(201).json(rows[0]);
   } catch (err) {
     next(err);
   }
 });
 
-/**
- * PUT /api/v1/dishes/:id
- * 更新菜品（需认证 + 所有权校验）
- */
-router.put('/:id', requireAuth, async (req, res, next) => {
+router.patch('/:id', async (req, res, next) => {
   try {
-    const existing = await getDishById(req.params.id);
-    if (!existing) {
-      return res.status(404).json({ error: { code: 'NOT_FOUND', message: '菜品不存在' } });
-    }
-    if (existing.createdBy !== req.user.openid) {
-      return res.status(403).json({ error: { code: 'FORBIDDEN', message: '无权修改此菜品' } });
-    }
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'invalid_id' });
 
-    const { name, category, description, imageUrl, isActive, sortOrder } = req.body;
-
-    if (category) {
-      const VALID_CATEGORIES = ['hot', 'cold', 'soup', 'staple', 'drink', 'other'];
-      if (!VALID_CATEGORIES.includes(category)) {
-        return res.status(400).json({
-          error: { code: 'VALIDATION_ERROR', message: `category 必须是 ${VALID_CATEGORIES.join('/')} 之一` },
-        });
+    const fields = [];
+    const values = [];
+    if ('name' in (req.body || {})) {
+      if (typeof req.body.name !== 'string' || req.body.name.length === 0 || req.body.name.length > 64) {
+        return res.status(400).json({ error: 'invalid_name' });
       }
+      fields.push('name = ?');
+      values.push(req.body.name);
     }
-
-    const updated = await updateDish(req.params.id, { name, category, description, imageUrl, isActive, sortOrder });
-    res.json({ data: toPublicDto(updated) });
+    if ('category' in (req.body || {})) {
+      if (!VALID_CATEGORIES.includes(req.body.category)) {
+        return res.status(400).json({ error: 'invalid_category' });
+      }
+      fields.push('category = ?');
+      values.push(req.body.category);
+    }
+    if ('is_active' in (req.body || {})) {
+      fields.push('is_active = ?');
+      values.push(req.body.is_active ? 1 : 0);
+    }
+    if ('sort_order' in (req.body || {})) {
+      const so = Number(req.body.sort_order);
+      if (!Number.isInteger(so)) return res.status(400).json({ error: 'invalid_sort_order' });
+      fields.push('sort_order = ?');
+      values.push(so);
+    }
+    if (fields.length === 0) return res.status(400).json({ error: 'no_fields' });
+    values.push(id);
+    const [result] = await pool.query(`UPDATE dishes SET ${fields.join(', ')} WHERE id = ?`, values);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'not_found' });
+    const [rows] = await pool.query('SELECT * FROM dishes WHERE id = ?', [id]);
+    res.json(rows[0]);
   } catch (err) {
     next(err);
   }
 });
 
-/**
- * DELETE /api/v1/dishes/:id
- * 删除菜品（软删除；需认证 + 所有权校验）
- */
-router.delete('/:id', requireAuth, async (req, res, next) => {
+router.delete('/:id', async (req, res, next) => {
   try {
-    const existing = await getDishById(req.params.id);
-    if (!existing) {
-      return res.status(404).json({ error: { code: 'NOT_FOUND', message: '菜品不存在' } });
-    }
-    if (existing.createdBy !== req.user.openid) {
-      return res.status(403).json({ error: { code: 'FORBIDDEN', message: '无权删除此菜品' } });
-    }
-
-    await deleteDish(req.params.id);
-    res.json({ data: { id: req.params.id } });
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'invalid_id' });
+    const [result] = await pool.query('DELETE FROM dishes WHERE id = ?', [id]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'not_found' });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }
