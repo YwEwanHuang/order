@@ -1,5 +1,5 @@
 import { api, ApiException, Dish, MealPlan } from '../../services/api';
-import { todayISO, shiftISO, formatDisplay } from '../../domain/date';
+import { todayISO, formatDisplay, isPastDate } from '../../domain/date';
 import { maskOpenid } from '../../domain/mealPlan';
 
 interface PageData {
@@ -15,6 +15,7 @@ interface PageData {
   editorLabel: string;
   updatedAtLabel: string;
   dishMap: Record<number, Dish>;
+  isPast: boolean;
 }
 
 Page<PageData, any>({
@@ -31,6 +32,7 @@ Page<PageData, any>({
     editorLabel: '',
     updatedAtLabel: '',
     dishMap: {},
+    isPast: false,
   },
 
   onLoad() {
@@ -38,8 +40,9 @@ Page<PageData, any>({
     this.setData({
       date: today,
       today,
-      maxDate: shiftISO(today, 6),
+      maxDate: today,
       dateLabel: formatDisplay(today),
+      isPast: false,
     });
     this.loadAll();
   },
@@ -80,7 +83,7 @@ Page<PageData, any>({
 
   onDateChange(e: WechatMiniprogram.PickerChange) {
     const date = e.detail.value;
-    this.setData({ date, dateLabel: formatDisplay(date) });
+    this.setData({ date, dateLabel: formatDisplay(date), isPast: isPastDate(date) });
     this.loadAll();
   },
 

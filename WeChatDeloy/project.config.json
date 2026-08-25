@@ -29,7 +29,7 @@
     },
     "enableEngineNative": false,
     "useIsolateContext": true,
-    "useCompilerModule": false,
+    "useCompilerModule": true,
     "userConfirmedUseCompilerModuleSwitch": true,
     "userConfirmedBundleSwitch": true,
     "packNpmManually": false,

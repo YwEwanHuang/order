@@ -1,6 +1,6 @@
 <view class="home">
   <view class="date-row">
-    <picker mode="date" value="{{date}}" start="{{today}}" end="{{maxDate}}" bindchange="onDateChange">
+    <picker mode="date" value="{{date}}" end="{{maxDate}}" bindchange="onDateChange">
       <view class="date-pill">{{dateLabel}}</view>
     </picker>
   </view>
@@ -16,10 +16,10 @@
 
   <block wx:elif="{{plan === null}}">
     <view class="state">
-      <view class="big">今晚还没选</view>
-      <view class="hint">默认显示今天，可切换到未来 6 天</view>
+      <view class="big">{{isPast ? '当天无记录' : '今晚还没选'}}</view>
+      <view class="hint">点击日期可切换任意一天</view>
     </view>
-    <button class="primary" bindtap="goSelect">选晚餐</button>
+    <button class="primary" bindtap="goSelect" wx:if="{{!isPast}}">选晚餐</button>
   </block>
 
   <block wx:else>
