@@ -70,4 +70,7 @@ export const api = {
 
   putMealPlan: (body: { date: string; dish_ids: number[]; note?: string }): Promise<MealPlan> =>
     call<MealPlan>('/api/v1/meal-plans', { method: 'PUT', data: body }),
+
+  deleteMealPlan: (date: string): Promise<{ ok: boolean; deleted: boolean }> =>
+    call<{ ok: boolean; deleted: boolean }>(`/api/v1/meal-plans?date=${date}`, { method: 'DELETE' }),
 };

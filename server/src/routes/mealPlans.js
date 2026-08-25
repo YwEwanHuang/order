@@ -104,4 +104,17 @@ router.put('/', async (req, res, next) => {
   }
 });
 
+router.delete('/', async (req, res, next) => {
+  try {
+    const { date } = req.query;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'invalid_date' });
+    }
+    const [result] = await pool.query('DELETE FROM meal_plans WHERE date = ?', [date]);
+    res.json({ ok: true, deleted: result.affectedRows > 0 });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

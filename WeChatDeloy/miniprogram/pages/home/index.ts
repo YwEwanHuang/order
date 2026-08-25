@@ -94,4 +94,20 @@ Page<PageData, any>({
   goDishes() {
     wx.navigateTo({ url: '/pages/dishes/index' });
   },
+
+  clearPlan() {
+    wx.showModal({
+      title: '确认清空',
+      content: '确定要清空今天的选菜记录吗？',
+      success: async (res) => {
+        if (!res.confirm) return;
+        try {
+          await api.deleteMealPlan(this.data.date);
+          this.loadAll();
+        } catch {
+          wx.showToast({ title: '清空失败', icon: 'none' });
+        }
+      },
+    });
+  },
 });

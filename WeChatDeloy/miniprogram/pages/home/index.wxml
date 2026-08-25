@@ -31,6 +31,7 @@
       <view class="meta">由 {{editorLabel}} 编辑于 {{updatedAtLabel}}</view>
     </view>
     <button class="primary" bindtap="goSelect">改一下</button>
+    <button class="secondary" bindtap="clearPlan">清空</button>
   </block>
 
   <view class="corner" bindtap="goDishes">
