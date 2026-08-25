@@ -10,12 +10,13 @@
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "noEmit": false,
-        "rootDir": "./",
+    "rootDir": "./",
     "baseUrl": "./",
     "paths": {
       "@/*": ["./*"]
     },
-    "typeRoots": ["./typings", "./node_modules/@types"]
+    "typeRoots": ["./typings", "./node_modules", "./node_modules/@types"],
+    "types": ["miniprogram-api-typings"]
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist", "miniprogram_npm", "**/*.test.ts"]

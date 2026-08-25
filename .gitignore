@@ -42,6 +42,9 @@ Thumbs.db
 # CloudBase CLI cache
 .tcb/
 
+# wxcloud CLI run:deploy build artifacts
+.cloudrun_*.zip
+
 # Test coverage
 coverage/
 server/coverage/
@@ -68,3 +71,7 @@ tmp/
 # miniprogram-ci local artefacts (preview/upload keys, qrcode png)
 .mprc.json
 private.key
+*.key
+*.pem
+*.p12
+upload-key.*

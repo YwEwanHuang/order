@@ -6,6 +6,9 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format:check": "prettier --check \"**/*.{ts,json,mjs,md}\"",
+    "format": "prettier --write \"**/*.{ts,json,mjs,md}\"",
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -13,7 +16,13 @@
     "verify": "npm run typecheck && npm run build && npm test"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.0.1",
+    "eslint-config-prettier": "^10.1.8",
+    "miniprogram-api-typings": "^5.2.3",
+    "prettier": "^3.9.6",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.67.0",
     "vitest": "^4.1.10"
   },
   "engines": {

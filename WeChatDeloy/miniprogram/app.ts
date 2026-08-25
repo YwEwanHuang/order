@@ -2,10 +2,10 @@
 
 App({
   globalData: {
-    // 云托管配置（由微信云托管网关注入，客户端代码不包含真实值）
-    // 真实值通过环境变量配置在云托管侧
-    cloudEnvId: '',
-    cloudServiceName: '',
+    // 云托管部署标识（不是密钥，对应 DECISIONS.md M0-D007）。
+    // envId 决定 callContainer 走哪个云开发环境，serviceName 决定 Cloud Run 路由到哪个服务。
+    cloudEnvId: 'prod-d8gkzjj6ub74bba3b',
+    cloudServiceName: 'express-stvz',
   },
 
   onLaunch() {

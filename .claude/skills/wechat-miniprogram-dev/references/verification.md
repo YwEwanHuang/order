@@ -39,6 +39,8 @@ Use the wechat-devtools MCP tools (not raw CLI). Common ones:
 - `get_page_data` / `get_current_page`
 - `screenshot`
 
+**Automation port:** this project's WeChat DevTools is configured to listen on **25039** (not the default 9420). Every MCP call that opens a connection to DevTools must pass `port: 25039` explicitly — the MCP server has no global env var for it. Confirm with `lsof -iTCP:25039 -sTCP:LISTEN` before declaring "MCP unavailable".
+
 If the DevTools service port is not enabled, the MCP will return an error like `服务端口未开启` or `connect ECONNREFUSED`. Surface that immediately — see "Manual prerequisites" below.
 
 ## Step 9 — screenshot
