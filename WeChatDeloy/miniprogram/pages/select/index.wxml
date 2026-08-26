@@ -6,30 +6,70 @@
   </block>
 
   <block wx:else>
-    <view class="group" wx:for="{{categories}}" wx:for-item="category" wx:key="key">
-      <view class="group-title">{{category.label}}</view>
-      <view class="grid">
+    <view class="main">
+      <scroll-view class="sidebar" scroll-y="true" scroll-into-view="cat-{{activeCategory}}">
         <view
-          wx:for="{{category.dishes}}"
-          wx:key="id"
-          class="pill {{selectedMap[item.id] ? 'selected' : ''}}"
-          bindtap="toggleDish"
-          data-id="{{item.id}}"
-        >{{item.name}}</view>
+          wx:for="{{categories}}"
+          wx:key="key"
+          id="cat-{{item.key}}"
+          class="cat-item {{activeCategory === item.key ? 'cat-active' : ''}}"
+          bindtap="onCategoryTap"
+          data-key="{{item.key}}"
+        >{{item.label}}</view>
+      </scroll-view>
+
+      <scroll-view
+        class="grid-scroll"
+        scroll-y="true"
+        scroll-into-view="row-{{activeCategory}}"
+        bindscroll="onGridScroll"
+        enhanced="true"
+        show-scrollbar="false"
+      >
+        <block wx:for="{{categories}}" wx:for-item="category" wx:for-index="catIndex" wx:key="key">
+          <view id="row-{{category.key}}" class="grid-row-title">{{category.label}}</view>
+          <view class="grid">
+            <view
+              wx:for="{{category.dishes}}"
+              wx:for-item="dish"
+              wx:key="id"
+              class="card {{selectedMap[dish.id] ? 'card-selected' : ''}}"
+            >
+              <image
+                class="card-img"
+                src="{{dish.image_url || defaultImage}}"
+                mode="aspectFill"
+              ></image>
+              <view class="card-name">{{dish.name}}</view>
+              <view
+                class="card-toggle"
+                bindtap="toggleDish"
+                data-id="{{dish.id}}"
+              >{{selectedMap[dish.id] ? '✓' : '+'}}</view>
+            </view>
+          </view>
+        </block>
+        <view class="bottom-spacer"></view>
+      </scroll-view>
+    </view>
+
+    <view class="summary">
+      <view class="summary-left">已选 {{selectedIds.length}} 道</view>
+      <view class="summary-right">
+        <textarea
+          class="summary-note"
+          placeholder="备注（选填，≤200 字）"
+          maxlength="200"
+          value="{{note}}"
+          bindinput="onNoteInput"
+        ></textarea>
+        <button
+          class="save-btn"
+          bindtap="save"
+          disabled="{{selectedIds.length === 0 || saving}}"
+        >保存</button>
       </view>
     </view>
-
-    <view class="note-row">
-      <textarea
-        placeholder="备注（选填，≤200 字）"
-        maxlength="200"
-        value="{{note}}"
-        bindinput="onNoteInput"
-      />
-      <view class="counter">{{note.length}}/200</view>
-    </view>
-
-    <button class="primary" bindtap="save" disabled="{{selectedIds.length === 0 || saving}}">保存</button>
     <view class="error" wx:if="{{error}}">{{error}}</view>
   </block>
 </view>

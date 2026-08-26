@@ -76,6 +76,15 @@ async function ensureSchema() {
       updated_by VARCHAR(64) NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
+  // MySQL 5.7 doesn't support ADD COLUMN IF NOT EXISTS; do an idempotent check.
+  const [cols] = await p.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'dishes' AND COLUMN_NAME = 'image_url'`,
+    [DB_NAME]
+  );
+  if (cols.length === 0) {
+    await p.query('ALTER TABLE dishes ADD COLUMN image_url VARCHAR(500) NULL AFTER sort_order');
+  }
   const [rows] = await p.query('SELECT COUNT(*) AS c FROM dishes');
   if (rows[0].c === 0) {
     const values = SEED_DISHES.map(([name, category]) => [name, category]);

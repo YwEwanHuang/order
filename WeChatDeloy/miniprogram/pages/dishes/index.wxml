@@ -1,27 +1,52 @@
 <view class="dishes">
-  <block wx:if="{{loading}}"><view class="state">加载中…</view></block>
+  <block wx:if="{{loading}}">
+    <view class="state">加载中…</view>
+  </block>
   <block wx:elif="{{error}}">
     <view class="state error">{{error}}</view>
     <button bindtap="load">重试</button>
   </block>
   <block wx:else>
-    <view class="empty" wx:if="{{items.length === 0}}">
-      <view>还没有菜品</view>
-      <button class="primary" bindtap="openCreate">+ 添加第一道</button>
-    </view>
-    <view wx:else>
-      <view class="row" wx:for="{{items}}" wx:key="id">
-        <view class="row-main">
-          <view class="name {{item.is_active ? '' : 'inactive'}}">{{item.name}}</view>
-          <view class="cat-tag">{{categoryLabel[item.category]}}</view>
-        </view>
-        <switch checked="{{item.is_active}}" bindchange="toggleActive" data-id="{{item.id}}"/>
-        <view class="row-actions">
-          <view class="link" bindtap="openEdit" data-id="{{item.id}}">编辑</view>
-          <view class="link danger" bindtap="confirmDelete" data-id="{{item.id}}">删除</view>
-        </view>
-      </view>
-      <button class="primary add" bindtap="openCreate">+ 添加菜品</button>
+    <view class="main">
+      <scroll-view class="sidebar" scroll-y="true">
+        <view
+          wx:for="{{categories}}"
+          wx:key="key"
+          class="cat-item {{activeCategory === item.key ? 'cat-active' : ''}}"
+          bindtap="onCategoryTap"
+          data-key="{{item.key}}"
+        >{{item.label}}</view>
+      </scroll-view>
+
+      <scroll-view class="grid-scroll" scroll-y="true" scroll-into-view="drow-{{activeCategory}}">
+        <block wx:for="{{categories}}" wx:for-item="cat" wx:key="key">
+          <view id="drow-{{cat.key}}" class="grid-row-title">{{cat.label}}</view>
+          <view class="grid">
+            <view
+              wx:for="{{cat.dishes}}"
+              wx:for-item="dish"
+              wx:key="id"
+              class="card {{dish.is_active ? '' : 'card-inactive'}}"
+            >
+              <image
+                class="card-img"
+                src="{{dish.image_url || defaultImage}}"
+                mode="aspectFill"
+              ></image>
+              <view class="card-name">{{dish.name}}</view>
+              <view class="card-actions">
+                <view class="card-link" catchtap="openEdit" data-id="{{dish.id}}">编辑</view>
+                <view class="card-link danger" catchtap="confirmDelete" data-id="{{dish.id}}">删除</view>
+              </view>
+            </view>
+            <view class="card card-add" bindtap="openCreate">
+              <view class="card-add-plus">+</view>
+              <view class="card-name">新增菜品</view>
+            </view>
+          </view>
+        </block>
+        <view class="bottom-spacer"></view>
+      </scroll-view>
     </view>
   </block>
 

@@ -7,6 +7,7 @@ export interface Dish {
   category: string;
   is_active: number;
   sort_order: number;
+  image_url?: string | null;
   created_at?: string;
 }
 
@@ -54,12 +55,12 @@ export const api = {
   listDishes: (includeInactive = false): Promise<Dish[]> =>
     call<Dish[]>(`/api/v1/dishes${includeInactive ? '?includeInactive=true' : ''}`),
 
-  createDish: (body: { name: string; category: string }): Promise<Dish> =>
+  createDish: (body: { name: string; category: string; image_url?: string | null }): Promise<Dish> =>
     call<Dish>('/api/v1/dishes', { method: 'POST', data: body }),
 
   updateDish: (
     id: number,
-    body: Partial<{ name: string; category: string; is_active: boolean; sort_order: number }>
+    body: Partial<{ name: string; category: string; is_active: boolean; sort_order: number; image_url: string | null }>
   ): Promise<Dish> => call<Dish>(`/api/v1/dishes/${id}`, { method: 'PATCH', data: body }),
 
   deleteDish: (id: number): Promise<{ ok: true }> =>

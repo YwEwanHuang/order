@@ -5,6 +5,7 @@ import { buildPayload, validateNote, validateDishCount } from '../../domain/meal
 const CATEGORY_LABEL: Record<string, string> = {
   hot: '热菜', cold: '凉菜', soup: '汤', staple: '主食',
 };
+const DEFAULT_IMAGE = '/images/default-goods-image.png';
 
 interface PageData {
   date: string;
@@ -16,6 +17,8 @@ interface PageData {
   categories: Array<{ key: string; label: string; dishes: Dish[] }>;
   selectedIds: number[];
   selectedMap: Record<number, boolean>;
+  activeCategory: string;
+  defaultImage: string;
 }
 
 Page<PageData, any>({
@@ -29,6 +32,8 @@ Page<PageData, any>({
     categories: [],
     selectedIds: [],
     selectedMap: {},
+    activeCategory: 'hot',
+    defaultImage: DEFAULT_IMAGE,
   },
 
   onLoad(query: Record<string, string>) {
@@ -57,12 +62,14 @@ Page<PageData, any>({
       const ids = plan?.dish_ids || [];
       const selectedMap: Record<number, boolean> = {};
       for (const id of ids) selectedMap[id] = true;
+      const firstCat = categories[0]?.key || 'hot';
       this.setData({
         loading: false,
         categories,
         selectedIds: ids,
         selectedMap,
         note: plan?.note || '',
+        activeCategory: firstCat,
       });
     } catch (e) {
       this.setData({ loading: false, error: e instanceof Error ? e.message : '加载失败' });
@@ -85,6 +92,17 @@ Page<PageData, any>({
       selectedIds.push(id);
     }
     this.setData({ selectedMap, selectedIds });
+  },
+
+  onCategoryTap(e: WechatMiniprogram.BaseEvent) {
+    const key = (e.currentTarget.dataset as { key: string }).key;
+    this.setData({ activeCategory: key });
+  },
+
+  onGridScroll(_e: WechatMiniprogram.ScrollViewScroll) {
+    // ScrollView doesn't expose per-element offsets directly. Snap activeCategory
+    // to first non-empty category; visual highlight still follows tap on sidebar.
+    // No-op here; sidebar tap drives activeCategory above.
   },
 
   onNoteInput(e: WechatMiniprogram.TextareaInput) {

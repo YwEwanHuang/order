@@ -9,6 +9,7 @@ const CATEGORY_OPTIONS = [
   { key: 'soup', label: '汤' },
   { key: 'staple', label: '主食' },
 ];
+const DEFAULT_IMAGE = '/images/default-goods-image.png';
 
 interface EditState {
   id: number | null;
@@ -20,10 +21,13 @@ interface PageData {
   loading: boolean;
   error: string;
   items: Dish[];
+  categories: Array<{ key: string; label: string; dishes: Dish[] }>;
+  activeCategory: string;
   categoryLabel: Record<string, string>;
   categoryOptions: typeof CATEGORY_OPTIONS;
   editing: EditState | null;
   editError: string;
+  defaultImage: string;
 }
 
 Page<PageData, any>({
@@ -31,10 +35,13 @@ Page<PageData, any>({
     loading: true,
     error: '',
     items: [],
+    categories: [],
+    activeCategory: 'hot',
     categoryLabel: CATEGORY_LABEL,
     categoryOptions: CATEGORY_OPTIONS,
     editing: null,
     editError: '',
+    defaultImage: DEFAULT_IMAGE,
   },
 
   onLoad() { this.load(); },
@@ -44,13 +51,37 @@ Page<PageData, any>({
     this.setData({ loading: true, error: '' });
     try {
       const items = await api.listDishes(true);
-      this.setData({ items, loading: false });
+      const grouped = new Map<string, Dish[]>();
+      for (const d of items) {
+        if (!grouped.has(d.category)) grouped.set(d.category, []);
+        grouped.get(d.category)!.push(d);
+      }
+      const categories = CATEGORY_OPTIONS
+        .filter((opt) => grouped.has(opt.key))
+        .map((opt) => ({
+          key: opt.key,
+          label: opt.label,
+          dishes: (grouped.get(opt.key) || []).sort((a, b) => a.sort_order - b.sort_order || a.id - b.id),
+        }));
+      this.setData({
+        items,
+        categories,
+        activeCategory: this.data.activeCategory && grouped.has(this.data.activeCategory)
+          ? this.data.activeCategory
+          : (categories[0]?.key || 'hot'),
+        loading: false,
+      });
     } catch (e) {
       this.setData({
         loading: false,
         error: e instanceof ApiException ? e.code : '加载失败',
       });
     }
+  },
+
+  onCategoryTap(e: WechatMiniprogram.BaseEvent) {
+    const key = (e.currentTarget.dataset as { key: string }).key;
+    this.setData({ activeCategory: key });
   },
 
   async toggleActive(e: WechatMiniprogram.SwitchChange) {
@@ -104,6 +135,7 @@ Page<PageData, any>({
         const created = await api.createDish({ name: ed.name, category: ed.category });
         this.setData({ items: [...this.data.items, created], editing: null });
       }
+      this.load();
     } catch (err) {
       this.setData({ editError: err instanceof ApiException ? err.code : '保存失败' });
     }
@@ -119,6 +151,7 @@ Page<PageData, any>({
         try {
           await api.deleteDish(id);
           this.setData({ items: this.data.items.filter((d) => d.id !== id) });
+          this.load();
         } catch (err) {
           wx.showToast({ title: err instanceof ApiException ? err.code : '删除失败', icon: 'none' });
         }

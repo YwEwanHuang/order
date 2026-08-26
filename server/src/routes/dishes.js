@@ -15,8 +15,8 @@ router.get('/', async (req, res, next) => {
   try {
     const includeInactive = req.query.includeInactive === 'true';
     const sql = includeInactive
-      ? 'SELECT id, name, category, is_active, sort_order, created_at FROM dishes ORDER BY is_active DESC, sort_order ASC, id ASC'
-      : 'SELECT id, name, category, is_active, sort_order, created_at FROM dishes WHERE is_active = 1 ORDER BY sort_order ASC, id ASC';
+      ? 'SELECT id, name, category, is_active, sort_order, image_url, created_at FROM dishes ORDER BY is_active DESC, sort_order ASC, id ASC'
+      : 'SELECT id, name, category, is_active, sort_order, image_url, created_at FROM dishes WHERE is_active = 1 ORDER BY sort_order ASC, id ASC';
     const [rows] = await pool.query(sql);
     res.json(rows);
   } catch (err) {
@@ -26,16 +26,19 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { name, category } = req.body || {};
+    const { name, category, image_url } = req.body || {};
     if (typeof name !== 'string' || name.length === 0 || name.length > 64) {
       return res.status(400).json({ error: 'invalid_name' });
     }
     if (!VALID_CATEGORIES.includes(category)) {
       return res.status(400).json({ error: 'invalid_category' });
     }
+    if (image_url !== undefined && image_url !== null && (typeof image_url !== 'string' || image_url.length > 500)) {
+      return res.status(400).json({ error: 'invalid_image_url' });
+    }
     const [result] = await pool.query(
-      'INSERT INTO dishes (name, category) VALUES (?, ?)',
-      [name, category]
+      'INSERT INTO dishes (name, category, image_url) VALUES (?, ?, ?)',
+      [name, category, image_url || null]
     );
     const [rows] = await pool.query('SELECT * FROM dishes WHERE id = ?', [result.insertId]);
     res.status(201).json(rows[0]);
@@ -74,6 +77,13 @@ router.patch('/:id', async (req, res, next) => {
       if (!Number.isInteger(so)) return res.status(400).json({ error: 'invalid_sort_order' });
       fields.push('sort_order = ?');
       values.push(so);
+    }
+    if ('image_url' in (req.body || {})) {
+      if (req.body.image_url !== null && (typeof req.body.image_url !== 'string' || req.body.image_url.length > 500)) {
+        return res.status(400).json({ error: 'invalid_image_url' });
+      }
+      fields.push('image_url = ?');
+      values.push(req.body.image_url);
     }
     if (fields.length === 0) return res.status(400).json({ error: 'no_fields' });
     values.push(id);
