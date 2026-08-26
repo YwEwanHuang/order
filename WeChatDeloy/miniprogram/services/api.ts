@@ -8,6 +8,7 @@ export interface Dish {
   is_active: number;
   sort_order: number;
   image_url?: string | null;
+  last_eaten_date?: string | null;
   created_at?: string;
 }
 

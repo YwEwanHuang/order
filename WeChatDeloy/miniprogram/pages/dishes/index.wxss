@@ -13,6 +13,7 @@
 .card { position: relative; width: 100%; background: #fff; border-radius: 16rpx; padding: 16rpx; box-sizing: border-box; box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04); display: flex; align-items: center; gap: 16rpx; }
 .card-img { width: 120rpx; height: 120rpx; flex-shrink: 0; aspect-ratio: 1 / 1; background: #f5f5f5; border-radius: 12rpx; }
 .card-name { font-size: 28rpx; color: #333; padding: 0; flex: 1; text-align: left; }
+.card-meta { font-size: 22rpx; color: #999; padding: 4rpx 0 8rpx; }
 .card-inactive .card-name { color: #999; text-decoration: line-through; }
 .card-inactive .card-img { opacity: 0.5; }
 .card-actions { display: flex; gap: 16rpx; flex-shrink: 0; }
@@ -35,6 +36,11 @@
 .img-btn { background: #fff; color: #86C8A0; border: 2rpx solid #86C8A0; border-radius: 24rpx; font-size: 24rpx; padding: 0 24rpx; height: 56rpx; line-height: 56rpx; margin: 0; }
 .img-btn.danger { color: #c00; border-color: #c00; }
 .img-btn[disabled] { color: #ccc; border-color: #ccc; }
+.sort-list { max-height: 60vh; overflow-y: auto; margin-bottom: 32rpx; }
+.sort-row { display: flex; align-items: center; gap: 16rpx; padding: 16rpx 0; border-bottom: 2rpx solid #f0f0f0; }
+.sort-name { flex: 1; font-size: 28rpx; color: #333; }
+.sort-actions { display: flex; gap: 12rpx; }
+.sort-btn { width: 56rpx; height: 56rpx; line-height: 56rpx; text-align: center; background: #f5f5f5; border-radius: 12rpx; font-size: 32rpx; color: #555; }
 .sheet-actions { display: flex; justify-content: space-between; }
 .link { font-size: 26rpx; color: #555; padding: 8rpx 16rpx; }
 .primary-link { color: #86C8A0; font-weight: bold; }

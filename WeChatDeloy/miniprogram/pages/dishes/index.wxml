@@ -27,6 +27,8 @@
               wx:for-item="dish"
               wx:key="id"
               class="card {{dish.is_active ? '' : 'card-inactive'}}"
+              bindlongtap="onDishLongPress"
+              data-key="{{cat.key}}"
             >
               <image
                 class="card-img"
@@ -34,6 +36,7 @@
                 mode="aspectFill"
               ></image>
               <view class="card-name">{{dish.name}}</view>
+              <view class="card-meta">{{dish.lastEatenLabel}}</view>
               <view class="card-actions">
                 <view class="card-link" catchtap="openEdit" data-id="{{dish.id}}">编辑</view>
                 <view class="card-link danger" catchtap="confirmDelete" data-id="{{dish.id}}">删除</view>
@@ -85,6 +88,31 @@
         <view class="link primary-link" bindtap="submitEdit">保存</view>
       </view>
       <view class="error" wx:if="{{editError}}">{{editError}}</view>
+    </view>
+  </view>
+
+  <view class="modal" wx:if="{{sorting !== null}}">
+    <view class="sheet">
+      <view class="sheet-title">调整排序 · {{sortingLabel}}</view>
+      <view class="sort-list">
+        <view
+          wx:for="{{sorting}}"
+          wx:key="id"
+          class="sort-row"
+        >
+          <view class="sort-name">{{item.name}}</view>
+          <view class="sort-actions">
+            <view class="sort-btn" catchtap="moveSort" data-id="{{item.id}}" data-dir="-1" wx:if="{{index > 0}}">↑</view>
+            <view class="sort-btn" catchtap="moveSort" data-id="{{item.id}}" data-dir="-1" wx:if="{{index === 0}}">·</view>
+            <view class="sort-btn" catchtap="moveSort" data-id="{{item.id}}" data-dir="1" wx:if="{{index < sorting.length - 1}}">↓</view>
+            <view class="sort-btn" catchtap="moveSort" data-id="{{item.id}}" data-dir="1" wx:if="{{index === sorting.length - 1}}">·</view>
+          </view>
+        </view>
+      </view>
+      <view class="sheet-actions">
+        <view class="link" bindtap="closeSort">取消</view>
+        <view class="link primary-link" bindtap="saveSort">保存</view>
+      </view>
     </view>
   </view>
 </view>

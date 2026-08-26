@@ -22,8 +22,8 @@ interface EditState {
 interface PageData {
   loading: boolean;
   error: string;
-  items: Dish[];
-  categories: Array<{ key: string; label: string; dishes: Dish[] }>;
+  items: Array<Dish & { lastEatenLabel?: string }>;
+  categories: Array<{ key: string; label: string; dishes: Array<Dish & { lastEatenLabel?: string }> }>;
   activeCategory: string;
   categoryLabel: Record<string, string>;
   categoryOptions: typeof CATEGORY_OPTIONS;
@@ -31,6 +31,8 @@ interface PageData {
   editError: string;
   uploading: boolean;
   defaultImage: string;
+  sorting: Dish[] | null;
+  sortingLabel: string;
 }
 
 Page<PageData, any>({
@@ -46,6 +48,8 @@ Page<PageData, any>({
     editError: '',
     uploading: false,
     defaultImage: DEFAULT_IMAGE,
+    sorting: null,
+    sortingLabel: '',
   },
 
   onLoad() { this.load(); },
@@ -54,7 +58,11 @@ Page<PageData, any>({
   async load() {
     this.setData({ loading: true, error: '' });
     try {
-      const items = await api.listDishes(true);
+      const rawItems = await api.listDishes(true);
+      const items = rawItems.map((d) => ({
+        ...d,
+        lastEatenLabel: this.formatEatenDate(d.last_eaten_date ?? null),
+      }));
       const grouped = new Map<string, Dish[]>();
       for (const d of items) {
         if (!grouped.has(d.category)) grouped.set(d.category, []);
@@ -81,6 +89,13 @@ Page<PageData, any>({
         error: e instanceof ApiException ? e.code : '加载失败',
       });
     }
+  },
+
+  formatEatenDate(dateStr: string | null | undefined): string {
+    if (!dateStr) return '还没吃过';
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+    if (!m) return dateStr;
+    return `上次吃：${Number(m[2])}月${Number(m[3])}日`;
   },
 
   onCategoryTap(e: WechatMiniprogram.BaseEvent) {
@@ -228,14 +243,70 @@ Page<PageData, any>({
       content: '历史记录里该菜会显示为「已删除菜品」。确认？',
       success: async (res) => {
         if (!res.confirm) return;
+        const target = this.data.items.find((d) => d.id === id);
         try {
           await api.deleteDish(id);
           this.setData({ items: this.data.items.filter((d) => d.id !== id) });
           this.load();
+          // Best-effort: delete the cloud storage file if it lives under our folder.
+          const url = target?.image_url;
+          if (url && url.startsWith('cloud://')) {
+            wx.cloud.deleteFile({
+              fileList: [url],
+              success: () => {},
+              fail: () => {},
+            });
+          }
         } catch (err) {
           wx.showToast({ title: err instanceof ApiException ? err.code : '删除失败', icon: 'none' });
         }
       },
     });
+  },
+
+  onDishLongPress(e: WechatMiniprogram.BaseEvent) {
+    const key = (e.currentTarget.dataset as { key: string }).key;
+    const cat = this.data.categories.find((c) => c.key === key);
+    if (!cat) return;
+    this.setData({
+      sorting: cat.dishes.map((d) => ({ ...d })),
+      sortingLabel: cat.label,
+    });
+  },
+
+  closeSort() {
+    this.setData({ sorting: null, sortingLabel: '' });
+  },
+
+  moveSort(e: WechatMiniprogram.BaseEvent) {
+    const id = Number((e.currentTarget.dataset as { id: number }).id);
+    const dir = Number((e.currentTarget.dataset as { dir: number }).dir);
+    const list = [...(this.data.sorting || [])];
+    const idx = list.findIndex((d) => d.id === id);
+    const target = idx + dir;
+    if (idx < 0 || target < 0 || target >= list.length) return;
+    [list[idx], list[target]] = [list[target], list[idx]];
+    this.setData({ sorting: list });
+  },
+
+  async saveSort() {
+    const list = this.data.sorting;
+    if (!list || list.length === 0) {
+      this.closeSort();
+      return;
+    }
+    wx.showLoading({ title: '保存中…' });
+    try {
+      // Apply sequential sort_order starting from 0 to preserve display order.
+      await Promise.all(
+        list.map((dish, idx) => api.updateDish(dish.id, { sort_order: idx }))
+      );
+      wx.hideLoading();
+      this.closeSort();
+      this.load();
+    } catch {
+      wx.hideLoading();
+      wx.showToast({ title: '排序失败', icon: 'none' });
+    }
   },
 });

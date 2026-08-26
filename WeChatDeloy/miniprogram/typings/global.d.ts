@@ -72,6 +72,11 @@ declare const wx: {
       success?: (res: { fileID: string }) => void;
       fail?: (err: unknown) => void;
     }): void;
+    deleteFile(options: {
+      fileList: string[];
+      success?: (res: { fileList: Array<{ fileID: string; status: number }> }) => void;
+      fail?: (err: unknown) => void;
+    }): void;
   };
   showToast(options: { title: string; icon?: string; duration?: number }): void;
   showModal(options: object): Promise<{ confirm: boolean; cancel: boolean }>;

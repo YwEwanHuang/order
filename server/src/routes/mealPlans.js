@@ -92,6 +92,15 @@ router.put('/', async (req, res, next) => {
       [date, JSON.stringify(dish_ids), note || null, openid]
     );
 
+    // Bump last_eaten_date for any dish that's newer than what's stored.
+    await pool.query(
+      `UPDATE dishes
+         SET last_eaten_date = ?
+       WHERE id IN (${dish_ids.map(() => '?').join(',')})
+         AND (last_eaten_date IS NULL OR last_eaten_date < ?)`,
+      [date, ...dish_ids, date]
+    );
+
     const [rows] = await pool.query(
       'SELECT date, dish_ids, note, updated_at, updated_by FROM meal_plans WHERE date = ?',
       [date]

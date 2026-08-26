@@ -85,6 +85,14 @@ async function ensureSchema() {
   if (cols.length === 0) {
     await p.query('ALTER TABLE dishes ADD COLUMN image_url VARCHAR(500) NULL AFTER sort_order');
   }
+  const [lastCols] = await p.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'dishes' AND COLUMN_NAME = 'last_eaten_date'`,
+    [DB_NAME]
+  );
+  if (lastCols.length === 0) {
+    await p.query('ALTER TABLE dishes ADD COLUMN last_eaten_date DATE NULL AFTER image_url');
+  }
   const [rows] = await p.query('SELECT COUNT(*) AS c FROM dishes');
   if (rows[0].c === 0) {
     const values = SEED_DISHES.map(([name, category]) => [name, category]);

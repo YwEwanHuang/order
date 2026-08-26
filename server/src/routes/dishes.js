@@ -20,8 +20,8 @@ router.get('/', async (req, res, next) => {
   try {
     const includeInactive = req.query.includeInactive === 'true';
     const sql = includeInactive
-      ? 'SELECT id, name, category, is_active, sort_order, image_url, created_at FROM dishes ORDER BY is_active DESC, sort_order ASC, id ASC'
-      : 'SELECT id, name, category, is_active, sort_order, image_url, created_at FROM dishes WHERE is_active = 1 ORDER BY sort_order ASC, id ASC';
+      ? 'SELECT id, name, category, is_active, sort_order, image_url, last_eaten_date, created_at FROM dishes ORDER BY is_active DESC, sort_order ASC, id ASC'
+      : 'SELECT id, name, category, is_active, sort_order, image_url, last_eaten_date, created_at FROM dishes WHERE is_active = 1 ORDER BY sort_order ASC, id ASC';
     const [rows] = await pool.query(sql);
     res.json(rows);
   } catch (err) {
