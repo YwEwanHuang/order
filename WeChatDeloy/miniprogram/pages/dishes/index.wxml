@@ -68,6 +68,18 @@
           data-key="{{item.key}}"
         >{{item.label}}</view>
       </view>
+      <view class="img-row">
+        <block wx:if="{{editing.image_url}}">
+          <image class="img-preview" src="{{editing.image_url}}" mode="aspectFill"></image>
+        </block>
+        <block wx:else>
+          <view class="img-empty">暂无图片</view>
+        </block>
+        <button class="img-btn" bindtap="pickImage" disabled="{{uploading}}">
+          {{uploading ? '上传中…' : (editing.image_url ? '换图' : '选图')}}
+        </button>
+        <button class="img-btn danger" bindtap="clearImage" wx:if="{{editing.image_url}}">移除</button>
+      </view>
       <view class="sheet-actions">
         <view class="link" bindtap="closeEdit">取消</view>
         <view class="link primary-link" bindtap="submitEdit">保存</view>

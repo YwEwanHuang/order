@@ -66,13 +66,32 @@ declare const wx: {
   cloud: {
     init(options: { traceUser?: boolean }): void;
     callContainer(config: object): Promise<unknown>;
-    uploadFile(options: object): Promise<{ fileID: string }>;
+    uploadFile(options: {
+      cloudPath: string;
+      filePath: string;
+      success?: (res: { fileID: string }) => void;
+      fail?: (err: unknown) => void;
+    }): void;
   };
   showToast(options: { title: string; icon?: string; duration?: number }): void;
   showModal(options: object): Promise<{ confirm: boolean; cancel: boolean }>;
   showLoading(options: { title?: string }): void;
   hideLoading(): void;
   chooseImage(options: { count?: number; sizeType?: string[] }): Promise<{ tempFilePaths: string[] }>;
+  chooseMedia(options: {
+    count?: number;
+    mediaType?: Array<'image' | 'video'>;
+    sizeType?: Array<'original' | 'compressed'>;
+    sourceType?: Array<'album' | 'camera'>;
+    success?: (res: { tempFiles: Array<{ tempFilePath: string; size: number }> }) => void;
+    fail?: (err: WechatMiniprogram.GeneralCallbackResult) => void;
+  }): void;
+  compressImage(options: {
+    src: string;
+    quality?: number;
+    success?: (res: { tempFilePath: string }) => void;
+    fail?: (err: WechatMiniprogram.GeneralCallbackResult) => void;
+  }): void;
   requestSubscribeMessage(options: { tmplIds: string[]; success?: (res: Record<string, string>) => void; fail?: (err: unknown) => void }): void;
   navigateTo(options: { url: string }): void;
   navigateBack(options?: object): void;

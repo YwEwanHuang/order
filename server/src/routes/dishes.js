@@ -6,6 +6,11 @@ const router = express.Router();
 
 const VALID_CATEGORIES = ['hot', 'cold', 'soup', 'staple'];
 
+function isValidImageUrl(value) {
+  if (typeof value !== 'string' || value.length > 500) return false;
+  return /^cloud:\/\//.test(value) || /^https?:\/\//.test(value);
+}
+
 function parseId(raw) {
   const id = Number(raw);
   return Number.isInteger(id) && id > 0 ? id : null;
@@ -33,7 +38,7 @@ router.post('/', async (req, res, next) => {
     if (!VALID_CATEGORIES.includes(category)) {
       return res.status(400).json({ error: 'invalid_category' });
     }
-    if (image_url !== undefined && image_url !== null && (typeof image_url !== 'string' || image_url.length > 500)) {
+    if (image_url !== undefined && image_url !== null && !isValidImageUrl(image_url)) {
       return res.status(400).json({ error: 'invalid_image_url' });
     }
     const [result] = await pool.query(
@@ -79,7 +84,7 @@ router.patch('/:id', async (req, res, next) => {
       values.push(so);
     }
     if ('image_url' in (req.body || {})) {
-      if (req.body.image_url !== null && (typeof req.body.image_url !== 'string' || req.body.image_url.length > 500)) {
+      if (req.body.image_url !== null && !isValidImageUrl(req.body.image_url)) {
         return res.status(400).json({ error: 'invalid_image_url' });
       }
       fields.push('image_url = ?');
