@@ -105,7 +105,7 @@ Page<PageData, any>({
     // No-op here; sidebar tap drives activeCategory above.
   },
 
-  onNoteInput(e: WechatMiniprogram.TextareaInput) {
+  onNoteInput(e: WechatMiniprogram.Input) {
     this.setData({ note: e.detail.value });
   },
 

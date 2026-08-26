@@ -56,13 +56,15 @@
     <view class="summary">
       <view class="summary-left">已选 {{selectedIds.length}} 道</view>
       <view class="summary-right">
-        <textarea
+        <input
           class="summary-note"
+          placeholder-class="summary-note-ph"
           placeholder="备注（选填，≤200 字）"
           maxlength="200"
           value="{{note}}"
           bindinput="onNoteInput"
-        ></textarea>
+          confirm-type="done"
+        ></input>
         <button
           class="save-btn"
           bindtap="save"
