@@ -75,3 +75,6 @@ private.key
 *.pem
 *.p12
 upload-key.*
+
+# Personal development experience notes (not synced to public repo)
+DEV_NOTES.md
